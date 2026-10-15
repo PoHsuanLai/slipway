@@ -37,6 +37,13 @@
 # A different prefix is for trying the install under a DESTDIR; the paths inside the policy are
 # rewritten to match.
 #
+# On a computer that uses SELinux (Fedora and its relatives), and not under a DESTDIR, the script also tells
+# the policy how to label the install root, so system services may run programs from it:
+# `semanage fcontext` gives ROOT(/.*)? the type usr_t and ROOT(/.*)?/bin(/.*)? bin_t, then `restorecon`
+# applies it. Both programs must be installed and the script must run as root; otherwise it prints
+# what to run. Nothing is done where SELinux is off or the tools are missing. slipway-apply also runs
+# `restorecon` on every release it places, so later releases need nothing from this script.
+#
 # The script is standalone and idempotent: run again, it changes nothing that is already as it
 # should be. It writes nothing under a home directory, and only writes under /usr when run, without
 # a destdir, by someone who may. The unit is not enabled (that writes under the home directory).
@@ -195,6 +202,32 @@ else
     changed=$((changed + 1))
     echo "installed ${settings#"$destdir"}"
 fi
+
+# SELinux labels for the install root (see the header). Quiet and harmless where SELinux is not in use.
+selinux_label_root() {
+    [ -z "$destdir" ] || return 0
+    [ -e /sys/fs/selinux/enforce ] || return 0
+    command -v semanage >/dev/null 2>&1 || {
+        echo "SELinux is on but semanage is not installed: not labelling $root (install policycoreutils-python-utils)"
+        return 0
+    }
+    if [ "$(id -u)" != 0 ]; then
+        echo "SELinux is on: as root, run: semanage fcontext -a -t bin_t '$root(/.*)?/bin(/.*)?' and semanage fcontext -a -t usr_t '$root(/.*)?', then restorecon -RF $root"
+        return 0
+    fi
+    # -a adds a rule; if one exists already, -m modifies it, so running again changes nothing.
+    for rule in "usr_t:$root(/.*)?" "bin_t:$root(/.*)?/bin(/.*)?"; do
+        type=${rule%%:*}
+        pattern=${rule#*:}
+        semanage fcontext -a -t "$type" "$pattern" 2>/dev/null || semanage fcontext -m -t "$type" "$pattern"
+        echo "SELinux: $pattern is labelled $type"
+    done
+    if command -v restorecon >/dev/null 2>&1 && [ -d "$root" ]; then
+        restorecon -RF "$root"
+        echo "SELinux: relabelled $root"
+    fi
+}
+selinux_label_root
 
 if [ "$changed" -eq 0 ]; then
     echo "nothing to change"
