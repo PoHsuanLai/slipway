@@ -1,0 +1,8 @@
+# Asks for the update service when something calls org.quire.Updates1 on the session bus (the
+# Software Update page, `slipway status`). Under systemd the bus starts the user unit named below, so
+# the service runs exactly as it does at login (same environment, same restarts); Exec is only the
+# fallback for a bus that does not talk to systemd, and runs what the unit runs.
+[D-BUS Service]
+Name=org.quire.Updates1
+Exec=/opt/quire/current/bin/slipway run
+SystemdService=slipway.service
