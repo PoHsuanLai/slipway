@@ -5,7 +5,9 @@ use slipway::dirs::Dirs;
 use slipway::elevate::ApplyFailure;
 use slipway::fsutil::{switch_link, write_atomic};
 use slipway::keys::{KeyError, from_compiled, load_key};
+use slipway::login;
 use slipway::problem::Problem;
+use slipway::service::is_from_owner;
 use slipway::state::StateStore;
 use slipway_core::{Attempt, Outcome, UnixSeconds};
 use std::ffi::OsString;
@@ -32,6 +34,146 @@ fn the_configuration_has_defaults_and_overrides() {
         Config::load(&file),
         Err(ConfigError::Parse { .. })
     ));
+}
+
+#[test]
+fn the_system_file_decides_where_and_what_and_the_person_only_what_is_shown() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (system, user) = (dir.path().join("system.toml"), dir.path().join("user.toml"));
+    std::fs::write(
+        &system,
+        "root = \"/srv/q\"\npubkey_path = \"/srv/q.pub\"\nname = \"Quire Lab\"\n",
+    )
+    .expect("write");
+    // The person's file tries every setting; only the two display ones count.
+    std::fs::write(
+        &user,
+        "root = \"/home/p/evil\"\npubkey_path = \"/home/p/evil.pub\"\nindex_url = \"https://evil.test\"\n\
+         apply_path = \"/home/p/evil\"\nsettings_command = \"open-it now\"\n",
+    )
+    .expect("write");
+    let config = Config::load_layered(&system, &user).expect("layered");
+    assert_eq!(config.root, PathBuf::from("/srv/q"));
+    assert_eq!(config.pubkey_path, PathBuf::from("/srv/q.pub"));
+    assert_eq!(config.index_url, Config::default().index_url);
+    assert_eq!(config.apply_path, Config::default().apply_path);
+    assert_eq!(config.settings_command, "open-it now");
+    assert_eq!(
+        config.name, "Quire Lab",
+        "the system's name stands unless the person names it"
+    );
+
+    std::fs::write(&user, "name = \"My Quire\"\nsettings_command = \"  \"\n").expect("write");
+    let config = Config::load_layered(&system, &user).expect("layered");
+    assert_eq!(config.name, "My Quire");
+    assert_eq!(
+        config.settings_command,
+        Config::default().settings_command,
+        "a blank command is ignored"
+    );
+
+    // Either file missing is fine; a damaged one is said so.
+    let nowhere = dir.path().join("none.toml");
+    assert_eq!(
+        Config::load_layered(&nowhere, &nowhere).expect("defaults"),
+        Config::default()
+    );
+    std::fs::write(&user, "name = [").expect("write");
+    assert!(matches!(
+        Config::load_layered(&system, &user),
+        Err(ConfigError::Parse { .. })
+    ));
+}
+
+#[test]
+fn the_login_is_read_through_seams_and_unknown_parts_stay_unknown() {
+    let env = |session: Option<&'static str>| {
+        move |name: &str| {
+            (name == "XDG_SESSION_ID")
+                .then_some(session)
+                .flatten()
+                .map(OsString::from)
+        }
+    };
+    let boot = |text: &'static str| {
+        move |path: &std::path::Path| {
+            assert_eq!(
+                path,
+                std::path::Path::new("/proc/sys/kernel/random/boot_id")
+            );
+            Ok(text.to_owned())
+        }
+    };
+    let both = login::here(env(Some("c2")), boot("1f0e-aa\n"));
+    assert_eq!(both.boot.as_deref(), Some("1f0e-aa"));
+    assert_eq!(both.session.as_deref(), Some("c2"));
+
+    let blank = login::here(env(Some("  ")), boot("\n"));
+    assert_eq!((blank.boot, blank.session), (None, None));
+
+    let unreadable = login::here(env(None), |_| {
+        Err(std::io::Error::from(std::io::ErrorKind::NotFound))
+    });
+    assert_eq!((unreadable.boot, unreadable.session), (None, None));
+}
+
+#[test]
+fn only_the_notification_servers_own_signal_counts() {
+    let table = [
+        (Some(":1.20"), Some(":1.20"), true),
+        (Some(":1.99"), Some(":1.20"), false),
+        (None, Some(":1.20"), false),
+        (Some(":1.20"), None, false),
+        (None, None, false),
+    ];
+    for (sender, owner, expected) in table {
+        assert_eq!(
+            is_from_owner(sender, owner),
+            expected,
+            "{sender:?} {owner:?}"
+        );
+    }
+}
+
+#[test]
+fn the_newest_refused_version_is_the_one_kept() {
+    let mut state = slipway::state::UserState::default();
+    state.refuse(v("0.2.0"));
+    state.refuse(v("0.1.0"));
+    assert_eq!(state.refused, Some(v("0.2.0")));
+    state.refuse(v("0.3.0"));
+    assert_eq!(state.refused, Some(v("0.3.0")));
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let store = StateStore::new(dir.path().join("state.toml"));
+    store.update(|s| s.refuse(v("0.3.0"))).expect("update");
+    assert_eq!(store.load().refused, Some(v("0.3.0")));
+}
+
+#[test]
+fn a_marker_from_before_the_login_was_recorded_still_reads() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("state.toml");
+    std::fs::write(
+        &path,
+        "[pending]\nversion = \"0.2.0\"\nstage = \"first_login_seen\"\n",
+    )
+    .expect("write");
+    let store = StateStore::new(path);
+    let marker = store.load().pending.expect("the marker is read");
+    assert_eq!(marker.session, None);
+    // And a marker with its login survives a round trip through the file.
+    let with_login = slipway_core::Pending::installed(
+        v("0.3.0"),
+        slipway_core::LoginSession {
+            boot: Some("b1".into()),
+            session: Some("4".into()),
+        },
+    );
+    store
+        .update(|s| s.pending = Some(with_login.clone()))
+        .expect("update");
+    assert_eq!(store.load().pending, Some(with_login));
 }
 
 #[test]

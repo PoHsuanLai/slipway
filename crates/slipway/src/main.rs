@@ -2,10 +2,11 @@
 
 use slipway::bootstrap::production;
 use slipway::cli::{Command, Exit, USAGE, confirm, dispatch, parse};
-use slipway::config::Config;
+use slipway::config::{Config, SYSTEM_CONFIG_PATH};
 use slipway::dirs::Dirs;
 use slipway::service::run;
 use slipway::state::StateStore;
+use std::path::Path;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -24,7 +25,7 @@ fn main() -> ExitCode {
         eprintln!("slipway: cannot tell where your settings are (no home folder)");
         return exit(Exit::Failed);
     };
-    let config = match Config::load(&dirs.config_file) {
+    let config = match Config::load_layered(Path::new(SYSTEM_CONFIG_PATH), &dirs.config_file) {
         Ok(config) => config,
         Err(e) => {
             eprintln!("slipway: {e}");
