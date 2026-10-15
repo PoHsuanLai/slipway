@@ -22,13 +22,13 @@ reads no clock, environment or file: the caller passes bytes, times and what it 
 ```
 crates/slipway-core/src/{lib, version, digest, sign, path, audit, exports, health, schedule, progress}.rs
                         release/{mod, error, file, export}.rs      plan/{mod, prune}.rs
-crates/slipway/src/{lib, main, config, dirs, state, layout, fsutil, keys, clock, elevate, problem, health, bootstrap}.rs
+crates/slipway/src/{lib, main, config, dirs, state, layout, fsutil, keys, clock, elevate, problem, health, login, bootstrap}.rs
                    bin/slipway_apply.rs
                    apply/{mod, error, staged, unpack, step, install, exports, lock}.rs
                    fetch/{mod, feed, stage, ureq_fetch}.rs
                    service/{mod, context, engine, object, notify, run, status}.rs
                    cli/{mod, args, client, wait, confirm}.rs
-dist/   slipway.service  org.quire.slipway.policy
+dist/   slipway.service  org.quire.slipway.policy  org.quire.Updates1.service
 scripts/install.sh  scripts/check-boundary.sh
 ```
 
@@ -46,11 +46,15 @@ the bundle, and `[[export]]` (`link`, `target`) per link the system needs. `slip
 validates all of it: simple paths only (no absolute, `..`, empty or backslash parts, nothing under
 `.slipway/`), unique files with none inside another, modes that are plain permission bits readable
 by the owner and not writable by anyone else, no setuid; export links only under the seven allowed
-directories, unique, naming something the bundle holds.
+directories, unique, each pointing at a file the bundle lists (not a folder). Limits: `release.toml`
+24 MiB, 100000 files, notes 16 KiB, bundle 8 GiB, 16 GiB unpacked. Folders in the bundle are made
+`0755` whatever the helper's umask. `release/release.py` in the desktop repository packs to exactly
+these rules; FINDINGS.md "Release pipeline" lists where the two differ.
 
 Trust anchor: a minisign public key, read from `/usr/share/slipway/release.pub` (the `pubkey_path`
 setting names another) with the `SLIPWAY_RELEASE_PUBKEY` build-time text as the fallback when the
-file does not exist. No key: nothing is installed and the person is told so.
+file does not exist. No key: nothing is installed and the person is told so. The key path is the
+`pubkey_path` of the system settings (section 5).
 
 ## 4. Install layout and the switch
 
@@ -86,6 +90,13 @@ slipway run  --download, verify--> cache  --> slipway-apply <staged dir>   (re-v
                                               slipway-apply --rollback
 ```
 
+Settings come from two files. The system file `/etc/slipway/config.toml` (written once by
+`scripts/install.sh`, never overwritten by it) holds `root` and `pubkey_path` and may hold any other
+setting; `slipway-apply` reads only it, and the daemon and the command line read it first, so they
+cannot disagree about the root or the key. The person's own `$XDG_CONFIG_HOME/slipway/config.toml`
+may only set `settings_command` and `name` (what the notification's button runs and what the software
+is called); every other key in it is ignored.
+
 The daemon never writes under the root. It downloads into `$XDG_CACHE_HOME/slipway/<version>/`,
 checks the signature of `release.toml` and then the bundle's size and digest, and only then asks
 `slipway-apply` to install the directory. The helper trusts nothing but the path: it reads the files
@@ -115,22 +126,40 @@ pending first login. The schedule (`next_check`) runs from `service/run.rs`: at 
 24 h plus up to an hour of per-machine jitter after a good check, an hour after a failed one.
 
 State file `$XDG_STATE_HOME/slipway/state.toml` (last check and outcome, notified version, confirmed
-version, pending marker) is written beside and renamed over. The configuration
-`$XDG_CONFIG_HOME/slipway/config.toml` is only read.
+version, pending marker, refused version) is written beside and renamed over. The configuration files
+are only read.
+
+A version that was rolled back, automatically at start-up or by `Rollback()`, is remembered as
+`refused` (the newest such). `slipway_core::offer` is the rule: a found version is offered only when
+it is newer than what runs and newer than the refused one, so the next check leaves `State` at `idle`
+with `Available` empty until something newer is published.
+
+The notification's "Details" button is honoured only when the `ActionInvoked` signal was sent by the
+connection that owns `org.freedesktop.Notifications` (`service/notify.rs`), as for any client of that
+service. `dist/org.quire.Updates1.service` lets the session bus start the service on demand: it names
+`SystemdService=slipway.service`, so the bus starts the same user unit the session starts at login.
 
 ## 7. Health and automatic rollback
 
-An install leaves the marker `pending { version, stage = awaiting_first_login }`. The session runs
-`slipway confirm` once the shell is up, which records the current version as confirmed. At every
-start `health::on_start` applies `slipway-core::decide_boot`:
+An install leaves the marker `pending { version, stage = awaiting_first_login, session }`, where
+`session` is the login the install ran in. A login is the boot id (`/proc/sys/kernel/random/boot_id`,
+read through the `login::here` seam) and `XDG_SESSION_ID` when the session manager set one. The
+session runs `slipway confirm` once the shell is up, which records the current version as confirmed.
+At every start `health::on_start` applies `slipway-core::decide_boot` with the login of this start:
 
-| marker | confirmed | action |
-| --- | --- | --- |
-| none | | nothing |
-| for another version, or confirmed | | clear it |
-| awaiting first login | no | move to first login seen |
-| first login seen | no, previous exists | roll back (`slipway-apply --rollback`), clear, notify "The update could not start, so the previous version was restored." |
-| first login seen | no, nothing to restore | clear it |
+| marker | confirmed | this start | action |
+| --- | --- | --- | --- |
+| none | | | nothing |
+| for another version, or confirmed | | | clear it |
+| set in this very login (a daemon restart) | no | | keep waiting, change nothing |
+| awaiting first login | no | another login | move to first login seen, recording this login |
+| first login seen | no, previous exists | another login or boot | roll back (`slipway-apply --rollback`), clear, remember the version as refused, notify "The update could not start, so the previous version was restored." |
+| first login seen | no, nothing to restore | another login or boot | clear it |
+
+"The same login" means the same known boot id and the same session id (neither having one counts
+as equal). An unknown boot id, or a marker written before the login was recorded, never counts as
+the same, which is the earlier rule. With no `XDG_SESSION_ID` at all, a second login on the same boot
+is indistinguishable from a restart, so the check waits for the next boot.
 
 ## 8. The seams
 
@@ -140,6 +169,7 @@ start `health::on_start` applies `slipway-core::decide_boot`:
 | `elevate::Elevate` | `Pkexec` | recording stand-in (`tests/it/health_start.rs`) |
 | `slipway_core::Authenticator` | `PublicKey` (minisign) | accept-all and reject-all (`tests/it/support.rs`) |
 | `Layout { root, export_base }` | `/opt/quire` and `/` | a temporary directory for both |
+| `login::here(var, read)` | `login::current()`: the environment and `/proc` | closures |
 
 The D-Bus object and the notification code are not covered by the unit tests (no bus in a test);
 they are checked by the orchestrator's session scenarios.

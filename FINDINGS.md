@@ -32,35 +32,124 @@ Departures from the plan, standing facts and open items. An entry names the cond
    `<release>/.slipway/` and bundle paths under it are refused.
 8. **Stale exports come from the kept record**, not from scanning the system: the links to drop are those
    in the `release.toml` kept inside the release being left, and only when they still point into the root.
-9. **The privileged helper takes its root and key from `/etc/slipway/config.toml`.** The daemon's
-   `root` setting must agree with it; on a default install both are `/opt/quire`.
-10. **Zero-length and over-large bundles** (0, or over 8 GiB), notes over 16 KiB, `release.toml` over 1 MiB,
-    more than 100000 files and more than 16 GiB unpacked are refused outright.
-11. **Notification senders are not checked.** The "Details" action is matched by notification id from the
-    notification service's `ActionInvoked` signal without confirming the sender is the server's owner (sill's
-    own code does). Any process of the same user could therefore open the Software Update page by sending a
-    forged signal for one of our ids; it can do nothing else. Closes when the sender check is copied in.
+9. **One system settings file decides the root and the key.** The privileged helper reads only
+   `/etc/slipway/config.toml`; the daemon and the command line read it first and then the person's file,
+   which may only set `settings_command` and `name` (other keys there are ignored, silently). So the two
+   cannot disagree. `scripts/install.sh` writes the file once (`root`, `pubkey_path`) and never overwrites
+   one; it says so when the existing file names another root than `--root`.
+10. **Zero-length and over-large bundles** (0, or over 8 GiB), notes over 16 KiB, `release.toml` over 24 MiB
+    (it was 1 MiB, which allowed only about 5000 of the 100000 files the file limit promises), more than
+    100000 files and more than 16 GiB unpacked are refused outright.
+11. **Notification senders are checked.** The "Details" action is honoured only when the `ActionInvoked`
+    signal came from the connection that owns `org.freedesktop.Notifications` (the pattern of sill's account
+    notices). The owner is looked up per pressed button of one of our notifications, not per signal.
+12. **A rolled-back version is refused until a newer one is published.** After an automatic or a manual
+    rollback the next checks leave `State` at `idle` and `Available` empty for that version and anything
+    older (`slipway_core::offer`). The person cannot re-install the refused version from the page; the way
+    back to it is a newer release, or deleting `refused` from the state file. Closes if the owner wants a
+    "try again" button.
+13. **Bundle folders are `0755`.** The tar's folder modes were ignored and folders got the helper's umask,
+    so a restrictive umask under pkexec would have made `/opt/quire` unreadable to the person. Folders the
+    unpack makes, and `<root>` and `<root>/releases` when they are new, are now set to `0755`. The effect of
+    a restrictive umask itself is not tested (setting one needs `unsafe`); the tests check the resulting modes.
+14. **An export points at a file.** A link to a folder in the bundle was accepted; the pipeline never makes
+    one and a folder link is not needed, so it is refused (`ExportTargetMissing`).
 
 ## Open questions
 
-1. **A daemon restart in the installing session counts as the "first login".** The marker moves on at the
-   first start after an install; if the daemon is restarted (crashed, session restarted) before the person
-   logs out, the next start sees "first login seen" without a confirmation and rolls back although the old
-   session was fine. A boot-id or session-id in the marker would settle it. The rule as specified is
-   implemented.
-2. **A rolled-back version is offered again** by the next check (it is newer than what is running); the
-   notification is not repeated (once per version) but the Software Update page shows it. Remembering a
-   rejected version in the state file is a small change if wanted.
-3. **`slipway confirm` writes the state file directly**, not through the daemon, so it works when the
+1. **`slipway confirm` writes the state file directly**, not through the daemon, so it works when the
    daemon is down; a read-modify-write race with the daemon's own writes is possible but both write
    whole-file renames and the fields are disjoint in practice.
-4. **Who writes `/etc/slipway/config.toml`?** Nothing ships it; defaults match the default layout. The
-   desktop installer should write it if the root moves.
-5. **D-Bus activation file.** None is shipped; the user unit (part of the graphical session) starts the
-   daemon, and the CLI says "The update service is not running." otherwise.
-6. **CONVENTIONS.md still names transom** (it was copied); the rules apply unchanged.
+2. **No `XDG_SESSION_ID`, second login on the same boot.** Indistinguishable from a daemon restart, so a
+   release that never confirmed is rolled back at the next boot instead of the next login. Closes if a
+   session manager without that variable matters; a per-login runtime-dir marker would settle it.
+3. **The first install has no slipway.** `install.sh` installs the helper, the policy, the unit, the bus
+   file and the settings, but the user unit and the bus file start `<root>/current/bin/slipway`, which
+   exists only after the first release is installed, and `slipway install` needs the running service.
+   The desktop README ("First install on a machine") says `sudo ./dist/install.sh ... && slipway install`;
+   neither works as written (the script is `scripts/install.sh`, and there is no `slipway` binary yet).
+   Closes when the first-install path is decided: `install.sh --with-cli` copying a built `slipway` to
+   `PREFIX/bin`, or a `slipway-apply <staged dir>` run by hand with a release downloaded by `curl`.
+4. **A root other than `/opt/quire`.** `install.sh --root` retargets slipway's own unit and bus file, but the
+   units and files inside the bundle name `/opt/quire/current/...` (the pipeline hard-codes `PREFIX`), so a
+   different root only works for a bundle built for it.
+
+## Release pipeline
+
+`desktop/release/release.py` (lane `wh-desk-release`, not landed when this was written) against
+`slipway-core`'s validation. Slipway's side was fixed where slipway was wrong; the pipeline's side is
+written as the exact change, for that lane (nothing of its was edited).
+
+Agree already (checked line by line): the three asset names, `format = 1`, `[[file]]` fields, `mode = 0o...`
+integers, the seven export directories (same list, same order), absolute clean export links, `target`
+relative to the current release, no links or devices in the bundle, folders only where files live (the
+pipeline emits only the ancestors of files, slipway refuses any other folder), unique entries, bundle
+digest and size, `components` as a string table, build metadata refused on both sides.
+
+Slipway was wrong (fixed here):
+
+- **Folder export targets.** Slipway accepted a folder holding listed files as an export target; the
+  pipeline requires `target in files`. Slipway now requires a listed file.
+- **`release.toml` size limit.** 1 MiB admitted only about 5000 files although 100000 are allowed. Now 24 MiB.
+- **Folder modes.** The pipeline writes folders `0755` in the tar; slipway ignored that and used the umask.
+  Now `0755`, see Decision 13.
+
+The pipeline is wrong or looser than slipway (slipway will refuse what the pipeline passes); the exact
+changes for `release.py`:
+
+1. **`.slipway/` is reserved.** `clean_path` accepts a first part of `.slipway`; slipway refuses it (the
+   verified `release.toml` is kept there). In `clean_path`, after the loop, add
+   `if path.split("/")[0] == ".slipway": raise Refused(f"{what} {path!r}: .slipway is reserved")`.
+   Applies to staged files, the manifest's files, and export targets (they all go through `clean_path`).
+2. **Modes.** `check_manifest` accepts any mode up to `0o777`; slipway refuses a mode writable by group or
+   others or not readable by the owner. Replace the mode condition with
+   `not isinstance(f.get("mode"), int) or f["mode"] & ~0o777 or f["mode"] & 0o022 or not f["mode"] & 0o400`.
+   (`pack` itself only writes 0644/0755, so this only matters to `verify`.)
+3. **Version.** `SEMVER` accepts leading zeros (`01.2.3`) and empty or leading-zero prerelease parts
+   (`1.0.0-a..b`, `1.0.0-01`) that slipway's parser refuses. Use the semver.org expression without build
+   metadata: `^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-((0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?$`.
+4. **Date.** `DATE` checks the shape only; slipway parses RFC 3339, so `2026-13-45T25:61:61Z` passes the
+   pipeline and fails slipway. In `check_manifest` add
+   `datetime.datetime.strptime(doc["date"], "%Y-%m-%dT%H:%M:%SZ")` inside a `try/except ValueError` that raises
+   `Refused("date is not a real time")`.
+5. **Limits.** Slipway refuses a bundle of 0 bytes or over 8 GiB (`8 << 30`), more than 100000 files,
+   notes over 16 KiB (`16 * 1024` bytes of UTF-8), a `release.toml` over 24 MiB (`24 << 20`) and more than
+   16 GiB (`16 << 30`) of files in total. Check all five in `pack` (after the text is built) and in `verify`
+   (`bundle["size"]`, `len(files)`, `len(notes.encode())`, the file size of `release.toml`, the sum of
+   `m.size` in `check_bundle`).
+6. **Raw DEL in strings.** `toml_str` is `json.dumps(..., ensure_ascii=False)`, which leaves U+007F as is;
+   TOML forbids it in a basic string, so notes containing it sign fine and then fail to parse in slipway.
+   Return `json.dumps(text, ensure_ascii=False).replace("\x7f", "\\u007f")`.
+7. **Signature kind.** Slipway verifies with legacy signatures disallowed (the prehashed `ED` kind only).
+   Current minisign signs prehashed by default; an old one signs legacy unless told otherwise, and
+   `minisign -V` in `check_signature` accepts both, so CI would pass what slipway refuses. After
+   `minisign -V` succeeds in `check_signature`, read the second line of `release.toml.minisig`, base64-decode
+   it, and `raise Refused("release.toml.minisig: not a prehashed signature")` unless it starts with `b"ED"`.
+   (Not run here: no minisign on this computer.)
+8. **README.** "First install on a machine" says `./dist/install.sh --pubkey`; the script is
+   `scripts/install.sh` with `--root`, `--pubkey`, `--prefix`, `--destdir`, `--sysconfdir` (see Open
+   question 3 for the part that does not work yet). Change `cd slipway && sudo ./dist/install.sh` to
+   `cd slipway && sudo scripts/install.sh --pubkey /path/to/release.pub`.
+
+Notes for the pipeline lane that are not mismatches:
+
+- `build.sh` puts `slipway-apply` into the bundle at `libexec/slipway-apply` and slipway's `dist/` under
+  `share/slipway/dist/`. Nothing uses either: the helper that polkit names is `/usr/libexec/slipway-apply`
+  from `install.sh`, deliberately not updated by a release (a release would replace a root-run binary).
+  Keep `share/slipway/dist/` out of the auto-exported directories, as now: slipway's own unit and bus file are
+  installed by `install.sh`, and an export onto the same path would be reported as a conflict and left alone.
+- Everything in `AUTO_EXPORT_DIRS` is exported as a link `/usr/<rel>` into `/opt/quire/current/<rel>`. systemd
+  and the bus follow such links; polkit's action directory is the one to confirm on a real machine.
 
 ## Not verified (no compiler in this lane)
 
-See the lane report: the whole tree is unbuilt. Every API was looked up in the registry sources, but
-nothing has been compiled or run.
+Nothing from the second slipway lane was compiled or run (only `cargo fmt -p` and the shell parts of
+`scripts/install.sh` under a temporary `--destdir`). Guesses to check first when building:
+
+- `zbus` 5.19: `fdo::DBusProxy::new(&Connection)`, `get_name_owner(BusName)`, `Message::header().sender()`
+  with `.as_str()` (all copied from sill's `accounts/backend/actions.rs`, same zbus version).
+- `Config::with_user` moves two fields out of `self` and then uses `..self`.
+- `Accept` coerces to `Arc<dyn Authenticator + Send + Sync>` inside `Ok(...)` in the engine test.
+- The engine test runs `Engine::begin` on a current-thread runtime and polls `snapshot()`.
+- The notification-sender check and the bus activation file are not covered by tests (no bus in a test);
+  the orchestrator's session scenarios check them.
