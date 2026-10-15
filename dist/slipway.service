@@ -1,0 +1,14 @@
+[Unit]
+Description=Software Update
+Documentation=https://github.com/PoHsuanLai/slipway
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/opt/quire/current/bin/slipway run
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=graphical-session.target

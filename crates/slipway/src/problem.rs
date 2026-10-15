@@ -1,0 +1,91 @@
+//! What went wrong, in words a person can act on. Nothing here names a protocol or a tool.
+
+use crate::elevate::ApplyFailure;
+use crate::fetch::{FeedError, FetchError, StageError};
+use crate::keys::KeyError;
+
+/// A failure, before it is put into words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Problem {
+    /// There is no key to check releases with.
+    NoKey,
+    /// The key is there but unreadable.
+    KeyUnreadable,
+    /// The release site could not be reached.
+    Offline,
+    /// What arrived could not be verified.
+    Unverified,
+    /// The person (or the system) did not allow the install.
+    NotAllowed,
+    /// Something is already being done.
+    Busy,
+    /// There is nothing to install.
+    NothingToInstall,
+    /// There is nothing to go back to.
+    NothingToRestore,
+    /// Anything else.
+    Other,
+}
+
+impl Problem {
+    /// The sentence shown to the person.
+    pub fn plain(self) -> &'static str {
+        match self {
+            Self::NoKey => {
+                "This computer cannot tell whether an update is genuine, so it will not install updates."
+            }
+            Self::KeyUnreadable => {
+                "The key that proves an update is genuine could not be read, so updates will not be installed."
+            }
+            Self::Offline => {
+                "Updates could not be checked. Make sure you are online and try again."
+            }
+            Self::Unverified => "The update could not be verified, so it was not installed.",
+            Self::NotAllowed => "The update was not allowed to install.",
+            Self::Busy => "An update is already in progress.",
+            Self::NothingToInstall => "There is no update to install.",
+            Self::NothingToRestore => "There is no earlier version to go back to.",
+            Self::Other => "The update could not be installed. Try again later.",
+        }
+    }
+
+    /// From the exit status of the privileged helper (see `slipway-apply --help`).
+    pub fn from_apply(failure: &ApplyFailure) -> Self {
+        match failure.code {
+            Some(126 | 127) => Self::NotAllowed,
+            Some(3) => Self::NothingToInstall,
+            Some(4) => Self::Unverified,
+            Some(5) => Self::Busy,
+            Some(6) => Self::NoKey,
+            _ => Self::Other,
+        }
+    }
+}
+
+impl From<&KeyError> for Problem {
+    fn from(e: &KeyError) -> Self {
+        match e {
+            KeyError::Missing => Self::NoKey,
+            KeyError::Unreadable => Self::KeyUnreadable,
+        }
+    }
+}
+
+impl From<&FeedError> for Problem {
+    fn from(e: &FeedError) -> Self {
+        match e {
+            FeedError::Fetch(_) => Self::Offline,
+            FeedError::Signature(_) | FeedError::Release(_) => Self::Unverified,
+        }
+    }
+}
+
+impl From<&StageError> for Problem {
+    fn from(e: &StageError) -> Self {
+        match e {
+            StageError::Fetch(FetchError::Save(_)) => Self::Other,
+            StageError::Fetch(_) => Self::Offline,
+            StageError::Mismatch => Self::Unverified,
+        }
+    }
+}
