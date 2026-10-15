@@ -205,3 +205,60 @@ fn path_errors_carry_through() {
     assert!(matches!(e, PathError::Climbing(_)));
     assert!(Sha256Hex::parse(&"0".repeat(64)).is_ok());
 }
+
+#[test]
+fn export_links_are_allowed_only_below_the_listed_folders() {
+    // (link, allowed)
+    let table: [(&str, bool); 24] = [
+        ("/usr/local/bin/casement", true),
+        ("/usr/share/wayland-sessions/quire.desktop", true),
+        ("/usr/share/xdg-desktop-portal/portals/quire.portal", true),
+        ("/usr/share/dbus-1/services/org.quire.Mail.service", true),
+        ("/usr/lib/systemd/user/casement.service", true),
+        ("/usr/share/applications/mailo.desktop", true),
+        ("/usr/share/polkit-1/actions/org.quire.slipway.policy", true),
+        ("/usr/share/quire/intents/org.quire.Shell.toml", true),
+        ("/usr/share/quire/skills/mail/SKILL.md", true),
+        ("/usr/share/porter/providers/openai.toml", true),
+        ("/usr/share/stoker/catalog/models.toml", true),
+        ("/usr/share/fonts/quire/Noto-COLRv1.ttf", true),
+        // Beside a listed folder, not inside it.
+        ("/usr/share/quire2/x", false),
+        ("/usr/share/quirex", false),
+        ("/usr/share/fonts2/x.ttf", false),
+        ("/usr/share/icons/hicolor/x.png", false),
+        // The folder itself is not a place for a link.
+        ("/usr/share/quire", false),
+        ("/usr/share/fonts", false),
+        // Other system places are the system step's, never an export.
+        ("/etc/porter/callers.toml", false),
+        ("/usr/lib/systemd/system/keycap.service", false),
+        ("/usr/share/polkit-1/rules.d/keycap.rules", false),
+        ("/usr/share/dbus-1/system-services/x.service", false),
+        // Climbing out of an allowed folder.
+        ("/usr/share/quire/../../../etc/passwd", false),
+        ("/usr/share/fonts//x.ttf", false),
+    ];
+    for (link, allowed) in table {
+        let mut doc = Doc::good();
+        doc.exports[0].0 = link.into();
+        let parsed = Release::parse(doc.render().as_bytes());
+        match (allowed, parsed) {
+            (true, Ok(_)) | (false, Err(ReleaseError::BadExportLink(_))) => {}
+            (true, Err(e)) => panic!("{link}: refused: {e:?}"),
+            (false, Ok(_)) => panic!("{link}: accepted"),
+            (false, Err(e)) => panic!("{link}: wrong refusal {e:?}"),
+        }
+    }
+}
+
+#[test]
+fn the_allowed_link_folders_are_plain_unique_absolute_folders() {
+    let dirs = slipway_core::release::ALLOWED_LINK_DIRS;
+    for dir in dirs {
+        assert!(dir.starts_with("/usr/"), "{dir}");
+        assert!(!dir.ends_with('/') && !dir.contains('*'), "{dir}");
+    }
+    let unique: std::collections::BTreeSet<_> = dirs.iter().collect();
+    assert_eq!(unique.len(), dirs.len());
+}

@@ -5,8 +5,9 @@ use crate::path::BundlePath;
 use serde::Deserialize;
 use std::path::Path;
 
-/// The only places a release may put a link.
-pub const ALLOWED_LINK_DIRS: [&str; 7] = [
+/// The only places a release may put a link. Each folder is listed by name: there are no wildcards,
+/// and a link may sit anywhere below a listed folder but never in a folder beside it.
+pub const ALLOWED_LINK_DIRS: [&str; 11] = [
     "/usr/share/wayland-sessions",
     "/usr/share/xdg-desktop-portal",
     "/usr/share/dbus-1/services",
@@ -14,6 +15,11 @@ pub const ALLOWED_LINK_DIRS: [&str; 7] = [
     "/usr/share/applications",
     "/usr/share/polkit-1/actions",
     "/usr/local/bin",
+    // Data the desktop's own programs read from the standard data folders.
+    "/usr/share/quire",
+    "/usr/share/porter",
+    "/usr/share/stoker",
+    "/usr/share/fonts",
 ];
 
 /// A link the release wants: `link` is an absolute path in one of [`ALLOWED_LINK_DIRS`]; it points at
