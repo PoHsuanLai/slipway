@@ -53,7 +53,15 @@ fn a_real_signature_verifies_and_a_changed_message_does_not() {
 #[test]
 fn a_key_file_with_a_comment_line_is_read_too() {
     let file = format!("untrusted comment: minisign public key 1\n{TEST_KEY}\n");
-    assert_eq!(PublicKey::parse(&file), PublicKey::parse(TEST_KEY));
+    // The comment is kept, so compare what the keys do, not the parsed values.
+    let with_comment = PublicKey::parse(&file).expect("a key file");
+    assert_eq!(with_comment.authenticate(b"test", TEST_SIGNATURE), Ok(()));
+    assert_eq!(
+        with_comment.authenticate(b"tested", TEST_SIGNATURE),
+        PublicKey::parse(TEST_KEY)
+            .expect("a key")
+            .authenticate(b"tested", TEST_SIGNATURE)
+    );
 }
 
 #[test]
