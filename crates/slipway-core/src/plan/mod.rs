@@ -40,6 +40,13 @@ pub enum Step {
         /// The release now current.
         to: Version,
     },
+    /// Make the system files match those of `to`, dropping those only `from` had.
+    SyncSystem {
+        /// The release being left, if any.
+        from: Option<Version>,
+        /// The release now current.
+        to: Version,
+    },
     /// Delete these release directories.
     Prune(Vec<Version>),
 }
@@ -84,6 +91,10 @@ pub fn plan_install(installed: &Installed, target: &Version) -> Result<Vec<Step>
         from: installed.current.clone(),
         to: target.clone(),
     });
+    steps.push(Step::SyncSystem {
+        from: installed.current.clone(),
+        to: target.clone(),
+    });
     let mut releases = installed.releases.clone();
     releases.push(target.clone());
     steps.push(Step::Prune(prune(
@@ -110,6 +121,10 @@ pub fn plan_rollback(installed: &Installed) -> Result<Vec<Step>, PlanError> {
         Step::SetPrevious(current.clone()),
         Step::SwitchCurrent(previous.clone()),
         Step::SyncExports {
+            from: Some(current.clone()),
+            to: previous.clone(),
+        },
+        Step::SyncSystem {
             from: Some(current.clone()),
             to: previous.clone(),
         },

@@ -44,6 +44,8 @@ pub struct Recipe<'a> {
     pub packed: Option<Vec<(&'a str, &'a str)>>,
     /// (link, target) exports.
     pub exports: Vec<(&'a str, &'a str)>,
+    /// Destinations of system files; their contents are in `listed` at `system<destination>`.
+    pub system: Vec<&'a str>,
 }
 
 impl<'a> Recipe<'a> {
@@ -59,6 +61,7 @@ impl<'a> Recipe<'a> {
                 "/usr/share/wayland-sessions/quire.desktop",
                 "share/wayland-sessions/quire.desktop",
             )],
+            system: Vec::new(),
         }
     }
 }
@@ -127,6 +130,7 @@ pub fn describe(
     version: &str,
     listed: &[(&str, &str)],
     exports: &[(&str, &str)],
+    system: &[&str],
     bundle: &[u8],
 ) -> String {
     let mut text = format!(
@@ -144,6 +148,9 @@ pub fn describe(
     for (link, target) in exports {
         text += &format!("[[export]]\nlink = \"{link}\"\ntarget = \"{target}\"\n");
     }
+    for path in system {
+        text += &format!("[[system]]\npath = \"{path}\"\n");
+    }
     text
 }
 
@@ -151,7 +158,13 @@ pub fn build(recipe: &Recipe<'_>) -> Built {
     let bundle = pack(recipe.packed.as_deref().unwrap_or(&recipe.listed));
     Built {
         version: v(recipe.version),
-        release_toml: describe(recipe.version, &recipe.listed, &recipe.exports, &bundle),
+        release_toml: describe(
+            recipe.version,
+            &recipe.listed,
+            &recipe.exports,
+            &recipe.system,
+            &bundle,
+        ),
         bundle,
     }
 }
@@ -160,7 +173,13 @@ pub fn build(recipe: &Recipe<'_>) -> Built {
 pub fn build_around(recipe: &Recipe<'_>, bundle: Vec<u8>) -> Built {
     Built {
         version: v(recipe.version),
-        release_toml: describe(recipe.version, &recipe.listed, &recipe.exports, &bundle),
+        release_toml: describe(
+            recipe.version,
+            &recipe.listed,
+            &recipe.exports,
+            &recipe.system,
+            &bundle,
+        ),
         bundle,
     }
 }

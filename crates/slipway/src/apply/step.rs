@@ -2,21 +2,33 @@
 
 use super::error::ApplyError;
 use super::exports::sync_exports;
+use super::relabel::{Reach, Relabel, Relabeled};
 use super::staged::Staged;
+use super::system::sync_system;
 use super::unpack::unpack;
 use crate::fsutil::{remove_tree, switch_link, sync_dir, sync_tree, write_atomic};
 use crate::layout::{Layout, RECORD_DIR, RECORD_RELEASE, RECORD_SIGNATURE};
 use slipway_core::Step;
 use std::fs;
 
-/// Runs `steps`. `staged` is the release being installed, or `None` for a rollback. Returns the
-/// export links that were left alone because something else is in the way.
+/// What running the steps left to tell the person.
+#[derive(Debug, Default)]
+pub struct Done {
+    /// Export links and system files left alone because something else is in the way.
+    pub conflicts: Vec<String>,
+    /// Things that did not work but did not stop the install (labels that could not be set).
+    pub warnings: Vec<String>,
+}
+
+/// Runs `steps`. `staged` is the release being installed, or `None` for a rollback. A new release
+/// is relabelled (where the computer uses SELinux) as soon as it is in place, before it becomes current.
 pub fn run(
     layout: &Layout,
     steps: &[Step],
     staged: Option<&Staged>,
-) -> Result<Vec<String>, ApplyError> {
-    let mut conflicts = Vec::new();
+    relabel: &dyn Relabel,
+) -> Result<Done, ApplyError> {
+    let mut done = Done::default();
     for step in steps {
         match step {
             Step::Unpack(version) => {
@@ -39,6 +51,12 @@ pub fn run(
                     .map_err(ApplyError::io("publishing the new release"))?;
                 sync_dir(&layout.releases_dir())
                     .map_err(ApplyError::io("flushing the releases folder"))?;
+                if let Relabeled::Failed(why) = relabel.relabel(&[layout.root.clone()], Reach::Tree)
+                {
+                    done.warnings.push(format!(
+                        "the security labels of the new release could not be set: {why}"
+                    ));
+                }
             }
             Step::SetPrevious(version) => {
                 switch_link(&layout.previous(), &Layout::relative_target(version))
@@ -49,7 +67,13 @@ pub fn run(
                     .map_err(ApplyError::io("switching to the new release"))?;
             }
             Step::SyncExports { from, to } => {
-                conflicts.extend(sync_exports(layout, from.as_ref(), to)?)
+                done.conflicts
+                    .extend(sync_exports(layout, from.as_ref(), to)?)
+            }
+            Step::SyncSystem { from, to } => {
+                let synced = sync_system(layout, from.as_ref(), to, relabel)?;
+                done.conflicts.extend(synced.conflicts);
+                done.warnings.extend(synced.warnings);
             }
             Step::Prune(doomed) => {
                 for version in doomed {
@@ -60,7 +84,7 @@ pub fn run(
             _ => {}
         }
     }
-    Ok(conflicts)
+    Ok(done)
 }
 
 /// Keeps the verified `release.toml` and its signature inside the new release.

@@ -31,6 +31,10 @@ fn installing_over_a_current_release_is_ordered_so_every_prefix_is_safe() {
                 from: Some(v("0.1.0")),
                 to: v("0.2.0")
             },
+            Step::SyncSystem {
+                from: Some(v("0.1.0")),
+                to: v("0.2.0")
+            },
             Step::Prune(vec![v("0.0.9")]),
         ]
     );
@@ -46,6 +50,10 @@ fn a_first_install_has_no_previous() {
             Step::Publish(v("0.1.0")),
             Step::SwitchCurrent(v("0.1.0")),
             Step::SyncExports {
+                from: None,
+                to: v("0.1.0")
+            },
+            Step::SyncSystem {
                 from: None,
                 to: v("0.1.0")
             },
@@ -77,6 +85,10 @@ fn rollback_swaps_current_and_previous() {
             Step::SetPrevious(v("0.2.0")),
             Step::SwitchCurrent(v("0.1.0")),
             Step::SyncExports {
+                from: Some(v("0.2.0")),
+                to: v("0.1.0")
+            },
+            Step::SyncSystem {
                 from: Some(v("0.2.0")),
                 to: v("0.1.0")
             },

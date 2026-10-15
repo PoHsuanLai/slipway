@@ -10,7 +10,7 @@ use std::fs;
 use std::io;
 
 /// Reads the verified description kept in an installed release.
-fn recorded(layout: &Layout, version: &Version) -> Result<Release, ApplyError> {
+pub(super) fn recorded(layout: &Layout, version: &Version) -> Result<Release, ApplyError> {
     let bytes = fs::read(layout.record(version)).map_err(ApplyError::io(format!(
         "reading the record of version {version}"
     )))?;

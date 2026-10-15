@@ -31,6 +31,8 @@ pub struct Doc {
     pub files: Vec<F>,
     /// (link, target)
     pub exports: Vec<(String, String)>,
+    /// Destinations of the system files.
+    pub system: Vec<String>,
 }
 
 impl Doc {
@@ -51,6 +53,7 @@ impl Doc {
                 "/usr/share/wayland-sessions/quire.desktop".into(),
                 "share/wayland-sessions/quire.desktop".into(),
             )],
+            system: Vec::new(),
         }
     }
 
@@ -75,6 +78,9 @@ impl Doc {
         }
         for (link, target) in &self.exports {
             text += &format!("[[export]]\nlink = \"{link}\"\ntarget = \"{target}\"\n");
+        }
+        for path in &self.system {
+            text += &format!("[[system]]\npath = \"{path}\"\n");
         }
         text
     }

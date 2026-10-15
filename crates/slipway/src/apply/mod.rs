@@ -7,10 +7,13 @@ mod error;
 mod exports;
 mod install;
 mod lock;
+mod relabel;
 mod staged;
 mod step;
+mod system;
 mod unpack;
 
 pub use error::{ApplyError, ExitCode};
-pub use install::{Applied, install, rollback};
+pub use install::{Applied, install, install_with, rollback, rollback_with};
+pub use relabel::{NoRelabel, Ran, Reach, Relabel, Relabeled, RunProgram, Selinux, SystemRunner};
 pub use staged::{Staged, StagedError};

@@ -20,11 +20,11 @@ reads no clock, environment or file: the caller passes bytes, times and what it 
 ## 2. Layout
 
 ```
-crates/slipway-core/src/{lib, version, digest, sign, path, audit, exports, health, schedule, progress}.rs
-                        release/{mod, error, file, export}.rs      plan/{mod, prune}.rs
+crates/slipway-core/src/{lib, version, digest, sign, path, audit, exports, system, health, schedule, progress}.rs
+                        release/{mod, error, file, export, system}.rs      plan/{mod, prune}.rs
 crates/slipway/src/{lib, main, config, dirs, state, layout, fsutil, keys, clock, elevate, problem, health, login, bootstrap}.rs
                    bin/slipway_apply.rs
-                   apply/{mod, error, staged, unpack, step, install, exports, lock}.rs
+                   apply/{mod, error, staged, unpack, step, install, exports, system, relabel, lock}.rs
                    fetch/{mod, feed, stage, ureq_fetch}.rs
                    service/{mod, context, engine, object, notify, run, status}.rs
                    cli/{mod, args, client, wait, confirm}.rs
@@ -42,11 +42,14 @@ A release is the tag `v<semver>` on the releases repository with three assets, f
 
 `release.toml` holds `format = 1`, `version`, `date` (RFC 3339), `notes`, `bundle = { name, sha256,
 size }`, informational `[components]`, one `[[file]]` (`path`, `sha256`, `mode`) per regular file in
-the bundle, and `[[export]]` (`link`, `target`) per link the system needs. `slipway-core::Release`
+the bundle, `[[export]]` (`link`, `target`) per link the system needs, and `[[system]]` (`path`) per
+file the helper copies into a system folder. `slipway-core::Release`
 validates all of it: simple paths only (no absolute, `..`, empty or backslash parts, nothing under
 `.slipway/`), unique files with none inside another, modes that are plain permission bits readable
-by the owner and not writable by anyone else, no setuid; export links only under the seven allowed
-directories, unique, each pointing at a file the bundle lists (not a folder). Limits: `release.toml`
+by the owner and not writable by anyone else, no setuid; export links only under the eleven allowed
+directories (`ALLOWED_LINK_DIRS`, each named, no wildcards), unique, each pointing at a file the bundle lists
+(not a folder); system files only directly in one of the seven `ALLOWED_SYSTEM_DIRS`, unique, each with
+its contents at `system<path>` in the bundle, and nothing else under `system/`. Limits: `release.toml`
 24 MiB, 100000 files, notes 16 KiB, bundle 8 GiB, 16 GiB unpacked. Folders in the bundle are made
 `0755` whatever the helper's umask. `release/release.py` in the desktop repository packs to exactly
 these rules; FINDINGS.md "Release pipeline" lists where the two differ.
@@ -68,7 +71,7 @@ file does not exist. No key: nothing is installed and the person is told so. The
 
 The root defaults to `/opt/quire`. `slipway-core::plan_install` turns (current, previous, releases,
 target) into ordered steps: `Unpack`, `Publish` (rename `.partial` to the version), `SetPrevious`,
-`SwitchCurrent`, `SyncExports`, `Prune`. Every prefix of the list leaves a working system: the new
+`SwitchCurrent`, `SyncExports`, `SyncSystem`, `Prune`. Every prefix of the list leaves a working system: the new
 tree is complete and flushed before the single `rename(2)` that changes what runs (`current.new` is
 made, then renamed over `current`). A target not newer than `current` is refused; a rollback is the
 same switch back with `current` and `previous` exchanged, so it can be undone. At most current,
@@ -81,6 +84,22 @@ release being left listed it, the new one does not, and it still points into the
 `slipway-core::plan_exports` decides from what the caller observed; `apply/exports.rs` observes and
 acts. The export base (`/` on a real system) is a field of `Layout`, so tests use a temporary
 directory.
+
+System files: some things work only as a real root-owned file in a system folder (a udev rule, a polkit
+rule, a login service, the keyboard daemon's unit). The bundle carries them under `system/<absolute
+path>`, `release.toml` lists each destination in `[[system]]`, and `SyncSystem` copies the verified file
+from the new release's tree (atomic rename, the listed mode). The destination must be directly in one of
+`ALLOWED_SYSTEM_DIRS` (`/etc/udev/rules.d`, `/etc/modules-load.d`, `/usr/lib/systemd/system`,
+`/etc/pam.d`, `/etc/polkit-1/rules.d`, `/etc/porter`, `/etc/quire`); anything else makes the whole release
+refused. A file is overwritten or removed only when it still holds exactly what an earlier release placed
+(`slipway-core::plan_system`, by digest); a person's own file, an edited one, or a link is left alone and
+reported like a conflicting export. A signed release can therefore put a file in these folders as root,
+which is as strong as the signing key: the folder list is the whole policy and lives in one constant.
+
+SELinux: after a release is published and before it becomes current, and after system files are
+placed, the helper runs `restorecon -RF <root>` and `restorecon -F <files>` (`apply/relabel.rs`), only when
+`/sys/fs/selinux/enforce` exists and the tool is installed; a missing tool is not an error and a failing
+one is a warning printed by the helper. The program runner is a trait (`RunProgram`) so tests use a fake.
 
 ## 5. Who runs as whom
 

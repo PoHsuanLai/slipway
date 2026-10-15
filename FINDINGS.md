@@ -55,6 +55,18 @@ Departures from the plan, standing facts and open items. An entry names the cond
 14. **An export points at a file.** A link to a folder in the bundle was accepted; the pipeline never makes
     one and a folder link is not needed, so it is refused (`ExportTargetMissing`).
 
+15. **More export folders (lane distro-slip, 2026-10-16).** `ALLOWED_LINK_DIRS` gained `/usr/share/quire`,
+    `/usr/share/porter`, `/usr/share/stoker` and `/usr/share/fonts`, so intents, skills, settings schemas,
+    providers, the model catalog and the bundled colour-emoji font reach the places their readers look.
+    The user-level systemd and D-Bus service folders were already listed. Each folder is named; a table test
+    covers accept and refuse.
+16. **System files (lane distro-slip).** `[[system]]` in `release.toml` and `SyncSystem` (see ARCHITECTURE
+    "System files"). Open question 5 below is the owner's.
+17. **SELinux labels (lane distro-slip).** `slipway-apply` runs `restorecon` on the root and on placed
+    system files where SELinux is in use; `scripts/install.sh` adds the `semanage fcontext` rules.
+    Not run on a real SELinux computer: the first Fedora install should check `ls -Z /opt/quire/current/bin`
+    and that `keycap.service` starts under the enforcing policy.
+
 ## Open questions
 
 1. **`slipway confirm` writes the state file directly**, not through the daemon, so it works when the
@@ -74,6 +86,12 @@ Departures from the plan, standing facts and open items. An entry names the cond
    units and files inside the bundle name `/opt/quire/current/...` (the pipeline hard-codes `PREFIX`), so a
    different root only works for a bundle built for it.
 
+5. **Does the release write `/etc/pam.d` at all?** The system step lists `/etc/pam.d`, `/usr/lib/systemd/system`,
+   `/etc/udev/rules.d` and `/etc/polkit-1/rules.d`, each of which gives whoever holds the signing key root
+   (a PAM stack can accept any password, a rule or unit can run a command as root). The signing key already
+   decides what runs in the session; this widens it to the whole computer. If that is too much, delete the
+   entry from `ALLOWED_SYSTEM_DIRS` and the desktop's PAM service stays an install-time step.
+
 ## Release pipeline
 
 `desktop/release/release.py` (lane `wh-desk-release`, not landed when this was written) against
@@ -81,7 +99,7 @@ Departures from the plan, standing facts and open items. An entry names the cond
 written as the exact change, for that lane (nothing of its was edited).
 
 Agree already (checked line by line): the three asset names, `format = 1`, `[[file]]` fields, `mode = 0o...`
-integers, the seven export directories (same list, same order), absolute clean export links, `target`
+integers, the export directories (the same list on both sides; now eleven, see decision 15), absolute clean export links, `target`
 relative to the current release, no links or devices in the bundle, folders only where files live (the
 pipeline emits only the ancestors of files, slipway refuses any other folder), unique entries, bundle
 digest and size, `components` as a string table, build metadata refused on both sides.

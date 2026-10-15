@@ -4,7 +4,7 @@
 //! signature and every digest are checked again here against the key installed on this computer.
 //! The install root and key come from `/etc/slipway/config.toml`, never from the caller.
 
-use slipway::apply::{ApplyError, ExitCode as Code, install, rollback};
+use slipway::apply::{ApplyError, ExitCode as Code, Selinux, install_with, rollback_with};
 use slipway::config::{Config, SYSTEM_CONFIG_PATH};
 use slipway::keys::{KeyError, load_key};
 use slipway::layout::Layout;
@@ -60,10 +60,11 @@ fn main() -> ExitCode {
         }
     };
     let layout = Layout::new(config.root.clone());
+    let relabel = Selinux::system();
     let result = match request {
-        Request::Rollback => rollback(&layout),
+        Request::Rollback => rollback_with(&layout, &relabel),
         Request::Install(dir) => match load_key(&config.pubkey_path) {
-            Ok(key) => install(&layout, &dir, &key),
+            Ok(key) => install_with(&layout, &dir, &key, &relabel),
             Err(KeyError::Missing) => Err(ApplyError::NoKey),
             Err(KeyError::Unreadable) => {
                 eprintln!("slipway-apply: the key to check updates with cannot be read");
@@ -75,6 +76,9 @@ fn main() -> ExitCode {
         Ok(applied) => {
             for link in &applied.conflicts {
                 eprintln!("slipway-apply: left {link} alone because something else is there");
+            }
+            for warning in &applied.warnings {
+                eprintln!("slipway-apply: {warning}");
             }
             println!("version {} is now current", applied.version);
             finish(Code::Done)

@@ -3,10 +3,12 @@
 mod error;
 mod export;
 mod file;
+mod system;
 
 pub use error::ReleaseError;
 pub use export::{ALLOWED_LINK_DIRS, Export};
 pub use file::FileEntry;
+pub use system::{ALLOWED_SYSTEM_DIRS, SYSTEM_TREE, SystemFile};
 
 use crate::{digest::Sha256Hex, schedule::UnixSeconds};
 use semver::Version;
@@ -54,6 +56,8 @@ pub struct Release {
     pub files: Vec<FileEntry>,
     /// Links the system needs into the release.
     pub exports: Vec<Export>,
+    /// Files the privileged helper copies into system folders.
+    pub system: Vec<SystemFile>,
 }
 
 #[derive(Deserialize)]
@@ -70,6 +74,8 @@ struct Raw {
     file: Vec<FileEntry>,
     #[serde(default)]
     export: Vec<Export>,
+    #[serde(default)]
+    system: Vec<SystemFile>,
 }
 
 impl Release {
@@ -102,6 +108,7 @@ impl Release {
         check_bundle(&raw.bundle)?;
         check_files(&raw.file)?;
         check_exports(&raw.export, &raw.file)?;
+        check_system(&raw.system, &raw.file)?;
         Ok(Self {
             version,
             released,
@@ -110,6 +117,7 @@ impl Release {
             components: raw.components,
             files: raw.file,
             exports: raw.export,
+            system: raw.system,
         })
     }
 
@@ -169,6 +177,29 @@ fn check_exports(exports: &[Export], files: &[FileEntry]) -> Result<(), ReleaseE
         }
         if !files.iter().any(|f| f.path == export.target) {
             return Err(ReleaseError::ExportTargetMissing(export.target.to_string()));
+        }
+    }
+    Ok(())
+}
+
+fn check_system(system: &[SystemFile], files: &[FileEntry]) -> Result<(), ReleaseError> {
+    let mut seen = BTreeSet::new();
+    for file in system {
+        file.check_path()?;
+        if !seen.insert(file.path.as_str()) {
+            return Err(ReleaseError::DuplicateSystemFile(file.path.clone()));
+        }
+        let source = file.source()?;
+        if !files.iter().any(|f| f.path == source) {
+            return Err(ReleaseError::SystemSourceMissing(file.path.clone()));
+        }
+    }
+    // Everything in the bundle's system folder must be listed: it is a place only listed files go.
+    let tree = format!("{SYSTEM_TREE}/");
+    for file in files.iter().filter(|f| f.path.as_str().starts_with(&tree)) {
+        let dest = &file.path.as_str()[SYSTEM_TREE.len()..];
+        if !seen.contains(dest) {
+            return Err(ReleaseError::SystemFileUnlisted(dest.to_owned()));
         }
     }
     Ok(())

@@ -53,4 +53,16 @@ pub enum ReleaseError {
     /// An export names something that is not a file the bundle holds (a folder does not count).
     #[error("the release links to {0}, which is not a file the bundle holds")]
     ExportTargetMissing(String),
+    /// A system file would go outside the allowed folders, or is spelled in a way that could escape them.
+    #[error("the release asks to place a file where that is not allowed: {0}")]
+    BadSystemPath(String),
+    /// The same system file is listed twice.
+    #[error("the release lists the system file {0} twice")]
+    DuplicateSystemFile(String),
+    /// A system file's contents are not a file the bundle holds.
+    #[error("the release places {0}, but the bundle holds no contents for it")]
+    SystemSourceMissing(String),
+    /// The bundle's `system` folder holds a file the release does not list as a system file.
+    #[error("the bundle holds {0} among the system files, but the release does not list it as one")]
+    SystemFileUnlisted(String),
 }
