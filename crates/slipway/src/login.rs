@@ -31,5 +31,8 @@ pub fn here(
 
 /// The login of this process on the real system.
 pub fn current() -> LoginSession {
-    here(|name| std::env::var_os(name), std::fs::read_to_string)
+    here(
+        |name| std::env::var_os(name),
+        |path: &std::path::Path| std::fs::read_to_string(path),
+    )
 }
