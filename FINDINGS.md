@@ -87,7 +87,7 @@ Departures from the plan, standing facts and open items. An entry names the cond
    different root only works for a bundle built for it.
 
 5. **Does the release write `/etc/pam.d` at all?** The system step lists `/etc/pam.d`, `/usr/lib/systemd/system`,
-   `/etc/udev/rules.d` and `/etc/polkit-1/rules.d`, each of which gives whoever holds the signing key root
+   `/etc/udev/rules.d`, `/etc/modprobe.d` and `/etc/polkit-1/rules.d`, each of which gives whoever holds the signing key root
    (a PAM stack can accept any password, a rule or unit can run a command as root). The signing key already
    decides what runs in the session; this widens it to the whole computer. If that is too much, delete the
    entry from `ALLOWED_SYSTEM_DIRS` and the desktop's PAM service stays an install-time step.

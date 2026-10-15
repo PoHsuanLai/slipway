@@ -14,9 +14,10 @@ use serde::Deserialize;
 pub const SYSTEM_TREE: &str = "system";
 
 /// The only folders a release may place a file in, and only directly in them (no sub-folders).
-pub const ALLOWED_SYSTEM_DIRS: [&str; 7] = [
+pub const ALLOWED_SYSTEM_DIRS: [&str; 8] = [
     "/etc/udev/rules.d",
     "/etc/modules-load.d",
+    "/etc/modprobe.d",
     "/usr/lib/systemd/system",
     "/etc/pam.d",
     "/etc/polkit-1/rules.d",

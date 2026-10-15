@@ -17,9 +17,10 @@ fn doc_placing(dest: &str) -> Doc {
 #[test]
 fn a_system_file_is_accepted_only_directly_in_an_allowed_folder() {
     // (destination, accepted)
-    let table: [(&str, bool); 26] = [
+    let table: [(&str, bool); 27] = [
         ("/etc/udev/rules.d/70-keycap.rules", true),
         ("/etc/modules-load.d/keycap.conf", true),
+        ("/etc/modprobe.d/99-palmrest.conf", true),
         ("/usr/lib/systemd/system/keycap.service", true),
         ("/etc/pam.d/sill", true),
         ("/etc/polkit-1/rules.d/49-keycap.rules", true),

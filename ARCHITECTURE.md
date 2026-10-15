@@ -48,7 +48,7 @@ validates all of it: simple paths only (no absolute, `..`, empty or backslash pa
 `.slipway/`), unique files with none inside another, modes that are plain permission bits readable
 by the owner and not writable by anyone else, no setuid; export links only under the eleven allowed
 directories (`ALLOWED_LINK_DIRS`, each named, no wildcards), unique, each pointing at a file the bundle lists
-(not a folder); system files only directly in one of the seven `ALLOWED_SYSTEM_DIRS`, unique, each with
+(not a folder); system files only directly in one of the eight `ALLOWED_SYSTEM_DIRS`, unique, each with
 its contents at `system<path>` in the bundle, and nothing else under `system/`. Limits: `release.toml`
 24 MiB, 100000 files, notes 16 KiB, bundle 8 GiB, 16 GiB unpacked. Folders in the bundle are made
 `0755` whatever the helper's umask. `release/release.py` in the desktop repository packs to exactly
@@ -89,7 +89,7 @@ System files: some things work only as a real root-owned file in a system folder
 rule, a login service, the keyboard daemon's unit). The bundle carries them under `system/<absolute
 path>`, `release.toml` lists each destination in `[[system]]`, and `SyncSystem` copies the verified file
 from the new release's tree (atomic rename, the listed mode). The destination must be directly in one of
-`ALLOWED_SYSTEM_DIRS` (`/etc/udev/rules.d`, `/etc/modules-load.d`, `/usr/lib/systemd/system`,
+`ALLOWED_SYSTEM_DIRS` (`/etc/udev/rules.d`, `/etc/modules-load.d`, `/etc/modprobe.d`, `/usr/lib/systemd/system`,
 `/etc/pam.d`, `/etc/polkit-1/rules.d`, `/etc/porter`, `/etc/quire`); anything else makes the whole release
 refused. A file is overwritten or removed only when it still holds exactly what an earlier release placed
 (`slipway-core::plan_system`, by digest); a person's own file, an edited one, or a link is left alone and
