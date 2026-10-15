@@ -1,0 +1,43 @@
+[workspace]
+resolver = "3"
+# slipway-core is pure (no network, no D-Bus, no filesystem writes): the release index, versions,
+# signature and digest checks, the install plan and the daily-check schedule. slipway does the I/O:
+# download, staging, the atomic switch and rollback, the session D-Bus service and the command line.
+# scripts/check-boundary.sh checks the edge.
+members = ["crates/slipway-core", "crates/slipway"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.92"
+repository = "https://github.com/PoHsuanLai/slipway"
+publish = false
+
+[workspace.dependencies]
+slipway-core = { path = "crates/slipway-core" }
+
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+semver = { version = "1", features = ["serde"] }
+# Release signatures: minisign format, verify only (MIT). Signing happens in CI with the minisign tool.
+minisign-verify = "0.2.5"
+sha2 = "0.11"
+time = { version = "0.3", features = ["serde", "formatting", "parsing", "macros"] }
+# Download over HTTPS with rustls (MIT OR Apache-2.0); blocking, run off the async runtime.
+ureq = { version = "3.4", default-features = false, features = ["rustls", "json"] }
+tar = "0.4.46"
+zstd = "0.13"
+zbus = { version = "5.19", default-features = false, features = ["tokio"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros", "fs", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "env-filter"] }
+proptest = "1"
+tempfile = "3"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+missing_debug_implementations = "warn"
