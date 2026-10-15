@@ -16,8 +16,9 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 /// The one format number this version understands.
 pub const FORMAT: u32 = 1;
-/// The largest `release.toml` read.
-pub const MAX_INDEX_BYTES: usize = 1 << 20;
+/// The largest `release.toml` read. Each listed file costs about 200 bytes, so this holds the
+/// largest allowed release ([`MAX_FILES`]) with room for the notes and components.
+pub const MAX_INDEX_BYTES: usize = 24 << 20;
 /// The longest notes text.
 pub const MAX_NOTES_BYTES: usize = 16 * 1024;
 /// The largest bundle accepted, in bytes.
@@ -166,14 +167,7 @@ fn check_exports(exports: &[Export], files: &[FileEntry]) -> Result<(), ReleaseE
         if !seen.insert(export.link.as_str()) {
             return Err(ReleaseError::DuplicateExport(export.link.clone()));
         }
-        let held = files.iter().any(|f| {
-            f.path == export.target
-                || f.path
-                    .as_str()
-                    .strip_prefix(export.target.as_str())
-                    .is_some_and(|rest| rest.starts_with('/'))
-        });
-        if !held {
+        if !files.iter().any(|f| f.path == export.target) {
             return Err(ReleaseError::ExportTargetMissing(export.target.to_string()));
         }
     }

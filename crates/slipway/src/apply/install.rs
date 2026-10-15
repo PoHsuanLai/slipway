@@ -8,6 +8,7 @@ use crate::layout::Layout;
 use semver::Version;
 use slipway_core::{Authenticator, plan_install, plan_rollback};
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
 /// What an install or rollback did.
@@ -20,8 +21,17 @@ pub struct Applied {
 }
 
 fn locked(layout: &Layout) -> Result<Lock, ApplyError> {
+    // Folders made now are readable by everyone, whatever umask the helper was started with.
+    let made: Vec<_> = [layout.root.clone(), layout.releases_dir()]
+        .into_iter()
+        .filter(|dir| !dir.exists())
+        .collect();
     fs::create_dir_all(layout.releases_dir())
         .map_err(ApplyError::io("creating the install folder"))?;
+    for dir in made {
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o755))
+            .map_err(ApplyError::io("opening the install folder"))?;
+    }
     Lock::take(&layout.lock_file())
 }
 

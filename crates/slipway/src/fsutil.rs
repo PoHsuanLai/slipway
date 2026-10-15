@@ -1,8 +1,8 @@
-//! Small durable file operations: atomic replace, symlink switch, directory flush.
+//! Small durable file operations: atomic replace, symlink switch, directory modes and flush.
 
 use std::fs::{self, File};
 use std::io::{self, Write};
-use std::os::unix::fs::symlink;
+use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
 
 fn sibling(path: &Path, suffix: &str) -> PathBuf {
@@ -52,6 +52,18 @@ pub fn remove_tree(dir: &Path) -> io::Result<()> {
         Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
         _ => Ok(()),
     }
+}
+
+/// Gives `dir` and every directory under it the mode `0o755`, whatever the process's umask was when
+/// they were made (the bundle's folders are plain, world-readable ones). Links are not followed.
+pub fn open_dirs(dir: &Path) -> io::Result<()> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            open_dirs(&entry.path())?;
+        }
+    }
+    fs::set_permissions(dir, fs::Permissions::from_mode(0o755))
 }
 
 /// Flushes every directory under `dir` (and `dir` itself).

@@ -4,7 +4,7 @@
 //! path (never through a link), hashed as it is written, and given the mode the release lists.
 
 use super::error::ApplyError;
-use crate::fsutil::sync_tree;
+use crate::fsutil::{open_dirs, sync_tree};
 use slipway_core::{Audit, EntryKind, Hasher, Release};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -62,6 +62,7 @@ pub fn unpack(bundle: &Path, release: &Release, dest: &Path) -> Result<(), Apply
         }
     }
     audit.finish()?;
+    open_dirs(dest).map_err(ApplyError::io("opening the new release's folders"))?;
     sync_tree(dest).map_err(ApplyError::io("flushing the new release"))
 }
 

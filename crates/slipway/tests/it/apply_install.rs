@@ -29,6 +29,19 @@ fn a_first_install_unpacks_switches_and_links() {
             & 0o777,
         0o644
     );
+    // Every folder is open to all readers, whatever umask the helper was started with.
+    for dir in [
+        sandbox.layout.root.clone(),
+        sandbox.layout.releases_dir(),
+        sandbox.layout.release_dir(&v("0.1.0")),
+        sandbox
+            .layout
+            .release_dir(&v("0.1.0"))
+            .join("share/wayland-sessions"),
+    ] {
+        let mode = std::fs::metadata(&dir).expect("meta").permissions().mode();
+        assert_eq!(mode & 0o777, 0o755, "{}", dir.display());
+    }
     assert!(sandbox.layout.record(&v("0.1.0")).is_file());
     // The export reads through the link into the current release.
     let link = sandbox.link("/usr/share/wayland-sessions/quire.desktop");

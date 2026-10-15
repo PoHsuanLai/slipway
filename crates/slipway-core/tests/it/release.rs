@@ -183,17 +183,20 @@ fn garbage_input_is_refused_not_a_panic() {
         b"\xff\xfe",
         b"format = 1",
         b"[[file]]",
-        &vec![b'a'; 2 << 20],
+        &vec![b'a'; slipway_core::release::MAX_INDEX_BYTES + 1],
     ] {
         assert!(Release::parse(bytes).is_err());
     }
 }
 
 #[test]
-fn a_directory_export_target_is_allowed_when_it_holds_files() {
+fn an_export_must_point_at_a_listed_file_not_a_folder() {
     let mut doc = Doc::good();
     doc.exports[0].1 = "share/wayland-sessions".into();
-    assert!(Release::parse(doc.render().as_bytes()).is_ok());
+    assert!(matches!(
+        Release::parse(doc.render().as_bytes()),
+        Err(ReleaseError::ExportTargetMissing(_))
+    ));
 }
 
 #[test]

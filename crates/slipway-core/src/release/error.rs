@@ -50,7 +50,7 @@ pub enum ReleaseError {
     /// The same link is listed twice.
     #[error("the release lists the link {0} twice")]
     DuplicateExport(String),
-    /// An export names something the bundle does not hold.
-    #[error("the release links to {0}, which the bundle does not hold")]
+    /// An export names something that is not a file the bundle holds (a folder does not count).
+    #[error("the release links to {0}, which is not a file the bundle holds")]
     ExportTargetMissing(String),
 }
