@@ -20,6 +20,8 @@ allow = [
     "Zlib",
     # Weak, file-level copyleft. The note below says why this one is here and GPL is not.
     "MPL-2.0",
+    # webpki-roots: the Mozilla CA list as data (permissive, attribution only), for HTTPS downloads.
+    "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.9
 
