@@ -37,10 +37,10 @@ pub async fn run(ctx: Context) -> Result<(), RunError> {
         .build()
         .await?;
     engine.connect(connection.clone());
-    if health == Health::Restored {
-        if let Err(e) = notify::post(&connection, &engine.posted(), RESTORED_TEXT).await {
-            tracing::warn!("could not post the restore notice: {e}");
-        }
+    if health == Health::Restored
+        && let Err(e) = notify::post(&connection, &engine.posted(), RESTORED_TEXT).await
+    {
+        tracing::warn!("could not post the restore notice: {e}");
     }
     tokio::spawn(notify::listen(
         connection.clone(),

@@ -133,7 +133,7 @@ impl Engine {
         let old = {
             let mut status = lock(&self.status);
             let old = status.clone();
-            edit(&mut *status);
+            edit(&mut status);
             old
         };
         self.announce(&old).await;

@@ -75,10 +75,10 @@ fn pack(items: &[(&str, &str)]) -> Vec<u8> {
     let mut tar = tar::Builder::new(Vec::new());
     let mut dirs: Vec<String> = Vec::new();
     for (path, _) in items {
-        if let Some((dir, _)) = path.rsplit_once('/') {
-            if !dirs.iter().any(|d| d == dir) {
-                dirs.push(dir.to_owned());
-            }
+        if let Some((dir, _)) = path.rsplit_once('/')
+            && !dirs.iter().any(|d| d == dir)
+        {
+            dirs.push(dir.to_owned());
         }
     }
     for dir in dirs {

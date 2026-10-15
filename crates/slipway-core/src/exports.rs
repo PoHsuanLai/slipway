@@ -78,12 +78,12 @@ pub fn plan_exports(
         });
     }
     for export in old.iter().filter(|o| !new.iter().any(|n| n.link == o.link)) {
-        if let Found::Link(t) = at(&export.link) {
-            if into_root(&t, root) {
-                actions.push(ExportAction::Remove {
-                    link: export.link.clone(),
-                });
-            }
+        if let Found::Link(t) = at(&export.link)
+            && into_root(&t, root)
+        {
+            actions.push(ExportAction::Remove {
+                link: export.link.clone(),
+            });
         }
     }
     actions

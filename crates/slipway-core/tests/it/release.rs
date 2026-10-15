@@ -200,5 +200,5 @@ fn a_directory_export_target_is_allowed_when_it_holds_files() {
 fn path_errors_carry_through() {
     let e = slipway_core::BundlePath::parse("a//b").unwrap_err();
     assert!(matches!(e, PathError::Climbing(_)));
-    assert_eq!(Sha256Hex::parse(&"0".repeat(64)).is_ok(), true);
+    assert!(Sha256Hex::parse(&"0".repeat(64)).is_ok());
 }

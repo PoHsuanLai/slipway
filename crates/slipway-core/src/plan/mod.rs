@@ -67,13 +67,13 @@ pub enum PlanError {
 /// The steps that install `target` over `installed`. A target not newer than the current release
 /// is refused: a downgrade is only ever a rollback.
 pub fn plan_install(installed: &Installed, target: &Version) -> Result<Vec<Step>, PlanError> {
-    if let Some(current) = &installed.current {
-        if standing(current, target) != Standing::Newer {
-            return Err(PlanError::NotNewer {
-                current: current.clone(),
-                target: target.clone(),
-            });
-        }
+    if let Some(current) = &installed.current
+        && standing(current, target) != Standing::Newer
+    {
+        return Err(PlanError::NotNewer {
+            current: current.clone(),
+            target: target.clone(),
+        });
     }
     let mut steps = vec![Step::Unpack(target.clone()), Step::Publish(target.clone())];
     if let Some(current) = &installed.current {

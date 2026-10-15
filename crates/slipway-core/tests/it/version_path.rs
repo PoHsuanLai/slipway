@@ -5,6 +5,9 @@ fn v(text: &str) -> Version {
     Version::parse(text).expect("version")
 }
 
+/// Whether a refusal is the expected one.
+type Refusal = fn(&PathError) -> bool;
+
 #[test]
 fn only_a_newer_version_is_ever_offered() {
     let table = [
@@ -39,7 +42,7 @@ fn bundle_paths_table() {
         assert!(BundlePath::parse(path).is_ok(), "{path}");
     }
     let long = "a/".repeat(600);
-    let bad: [(&str, fn(&PathError) -> bool); 11] = [
+    let bad: [(&str, Refusal); 11] = [
         ("", |e| matches!(e, PathError::Empty)),
         ("/etc/passwd", |e| matches!(e, PathError::Absolute(_))),
         ("../x", |e| matches!(e, PathError::Climbing(_))),

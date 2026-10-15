@@ -12,18 +12,21 @@ fn pending(version: &str, stage: PendingStage) -> Option<Pending> {
     })
 }
 
+/// name, current, pending marker, confirmed, whether a previous release exists, the decision
+type Row<'a> = (
+    &'a str,
+    Option<&'a str>,
+    Option<Pending>,
+    Option<&'a str>,
+    Restore,
+    Boot,
+);
+
 #[test]
 fn the_start_up_decision_table() {
     use PendingStage::{AwaitingFirstLogin as First, FirstLoginSeen as Seen};
     use Restore::{Impossible, Possible};
-    let table: Vec<(
-        &str,
-        Option<&str>,
-        Option<Pending>,
-        Option<&str>,
-        Restore,
-        Boot,
-    )> = vec![
+    let table: Vec<Row> = vec![
         (
             "no marker",
             Some("0.2.0"),
