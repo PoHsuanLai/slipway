@@ -171,57 +171,69 @@ fn system_files_are_placed_kept_replaced_removed_or_left_alone() {
     let cases: Vec<(&str, Vec<SystemAction>, Vec<SystemAction>)> = vec![
         (
             "nothing there: place",
-            plan(&[new_v2.clone()], &[], &[]),
+            plan(std::slice::from_ref(&new_v2), &[], &[]),
             vec![place(&new_v2)],
         ),
         (
             "already the right contents: keep",
-            plan(&[new_v2.clone()], &[], &[(UDEV, file("v2"))]),
+            plan(std::slice::from_ref(&new_v2), &[], &[(UDEV, file("v2"))]),
             vec![SystemAction::Keep { path: UDEV.into() }],
         ),
         (
             "the earlier release's contents: replace",
-            plan(&[new_v2.clone()], &[old_v1.clone()], &[(UDEV, file("v1"))]),
+            plan(
+                std::slice::from_ref(&new_v2),
+                std::slice::from_ref(&old_v1),
+                &[(UDEV, file("v1"))],
+            ),
             vec![place(&new_v2)],
         ),
         (
             "the person's own contents: leave alone",
             plan(
-                &[new_v2.clone()],
-                &[old_v1.clone()],
+                std::slice::from_ref(&new_v2),
+                std::slice::from_ref(&old_v1),
                 &[(UDEV, file("mine"))],
             ),
             vec![conflict(UDEV)],
         ),
         (
             "contents of an earlier release we did not place: leave alone",
-            plan(&[new_v2.clone()], &[], &[(UDEV, file("v1"))]),
+            plan(std::slice::from_ref(&new_v2), &[], &[(UDEV, file("v1"))]),
             vec![conflict(UDEV)],
         ),
         (
             "a link or folder in the way: leave alone",
             plan(
-                &[new_v2.clone()],
-                &[old_v1.clone()],
+                std::slice::from_ref(&new_v2),
+                std::slice::from_ref(&old_v1),
                 &[(UDEV, SystemFound::Foreign)],
             ),
             vec![conflict(UDEV)],
         ),
         (
             "dropped by the new release and untouched: remove",
-            plan(&[], &[gone.clone()], &[("/etc/pam.d/sill", file("pam"))]),
+            plan(
+                &[],
+                std::slice::from_ref(&gone),
+                &[("/etc/pam.d/sill", file("pam"))],
+            ),
             vec![SystemAction::Remove {
                 path: "/etc/pam.d/sill".into(),
             }],
         ),
         (
             "dropped by the new release but edited: leave alone, say nothing",
-            plan(&[], &[gone.clone()], &[("/etc/pam.d/sill", file("edited"))]),
+            plan(
+                &[],
+                std::slice::from_ref(&gone),
+                &[("/etc/pam.d/sill", file("edited"))],
+            ),
             vec![],
         ),
         (
             "dropped by the new release and already gone",
-            plan(&[], &[gone.clone()], &[]),
+            plan(&[], std::slice::from_ref(&gone), &[]),
             vec![],
         ),
         (

@@ -51,7 +51,8 @@ pub fn run(
                     .map_err(ApplyError::io("publishing the new release"))?;
                 sync_dir(&layout.releases_dir())
                     .map_err(ApplyError::io("flushing the releases folder"))?;
-                if let Relabeled::Failed(why) = relabel.relabel(&[layout.root.clone()], Reach::Tree)
+                if let Relabeled::Failed(why) =
+                    relabel.relabel(std::slice::from_ref(&layout.root), Reach::Tree)
                 {
                     done.warnings.push(format!(
                         "the security labels of the new release could not be set: {why}"
