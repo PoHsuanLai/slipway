@@ -9,6 +9,7 @@ mod status;
 
 pub use context::{Anchor, Context};
 pub use engine::{Engine, Job};
+pub use notify::is_from_owner;
 pub use object::{BUS_NAME, PATH, Updates};
 pub use run::{RunError, run};
 pub use status::{Phase, Status};

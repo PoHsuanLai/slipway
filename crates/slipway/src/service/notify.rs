@@ -5,7 +5,9 @@ use std::pin::Pin;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex, PoisonError};
 use zbus::export::futures_core::Stream;
+use zbus::fdo::DBusProxy;
 use zbus::message::Type as MessageType;
+use zbus::names::BusName;
 use zbus::zvariant::Value;
 use zbus::{Connection, MatchRule, MessageStream};
 
@@ -65,8 +67,31 @@ async fn next<S: Stream + Unpin>(stream: &mut S) -> Option<S::Item> {
     std::future::poll_fn(|cx| Pin::new(&mut *stream).poll_next(cx)).await
 }
 
+/// Whether a signal really came from the notification server: its sender is the connection that owns
+/// the server's well-known name. A signal from any other connection is nobody's word, so a forged
+/// `ActionInvoked` opens nothing. Either side unknown means no.
+pub fn is_from_owner(sender: Option<&str>, owner: Option<&str>) -> bool {
+    matches!((sender, owner), (Some(sender), Some(owner)) if sender == owner)
+}
+
+/// Who owns the notification server's name now, if anyone.
+async fn server_owner(connection: &Connection) -> Option<String> {
+    let bus = DBusProxy::new(connection).await.ok()?;
+    let owner = bus
+        .get_name_owner(BusName::try_from(SERVICE).ok()?)
+        .await
+        .ok()?;
+    Some(owner.as_str().to_owned())
+}
+
+/// Whether `message` was sent by the notification server.
+async fn from_server(connection: &Connection, message: &zbus::Message) -> bool {
+    let sender = message.header().sender().map(|s| s.as_str().to_owned());
+    is_from_owner(sender.as_deref(), server_owner(connection).await.as_deref())
+}
+
 /// Runs `settings_command` (split on spaces, no shell) whenever the person presses the button of
-/// one of our notifications. Ends when the bus connection ends.
+/// one of our notifications, as the notification server reported it. Ends when the bus connection ends.
 pub async fn listen(
     connection: Connection,
     posted: Posted,
@@ -82,7 +107,7 @@ pub async fn listen(
         let Ok((id, key)) = message.body().deserialize::<(u32, String)>() else {
             continue;
         };
-        if key == DEFAULT_ACTION && posted.knows(id) {
+        if key == DEFAULT_ACTION && posted.knows(id) && from_server(&connection, &message).await {
             open_settings(&settings_command);
         }
     }
