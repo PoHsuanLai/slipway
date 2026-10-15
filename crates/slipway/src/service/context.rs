@@ -6,7 +6,7 @@ use crate::fetch::{Fetch, Source};
 use crate::keys::KeyError;
 use crate::layout::Layout;
 use crate::state::StateStore;
-use slipway_core::Authenticator;
+use slipway_core::{Authenticator, LoginSession};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -31,6 +31,8 @@ pub struct Context {
     pub anchor: Anchor,
     /// How the privileged helper is run.
     pub elevate: Arc<dyn Elevate>,
+    /// The login this daemon runs in (the health marker's notion of "the same session").
+    pub login: LoginSession,
     /// A number that spreads this computer's checks over the hour.
     pub seed: u64,
 }

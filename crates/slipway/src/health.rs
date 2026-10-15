@@ -3,7 +3,7 @@
 use crate::elevate::Elevate;
 use crate::layout::Layout;
 use crate::state::StateStore;
-use slipway_core::{Boot, PendingStage, Restore, decide_boot};
+use slipway_core::{Boot, LoginSession, Restore, decide_boot};
 
 /// What the start-up check did.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -15,8 +15,15 @@ pub enum Health {
 }
 
 /// Looks at the marker the last install left and acts on it: moves it on, clears it, or rolls back
-/// (through `elevate`) when the first session on the new release never confirmed.
-pub fn on_start(layout: &Layout, store: &StateStore, elevate: &dyn Elevate) -> Health {
+/// (through `elevate`) when the first session on the new release never confirmed. `here` is the
+/// login this start belongs to: a restart inside the login the marker was last set in changes nothing.
+/// A release that is rolled back is remembered as refused, so the next check does not offer it again.
+pub fn on_start(
+    layout: &Layout,
+    store: &StateStore,
+    elevate: &dyn Elevate,
+    here: &LoginSession,
+) -> Health {
     let Ok(installed) = layout.installed() else {
         return Health::Fine;
     };
@@ -30,24 +37,27 @@ pub fn on_start(layout: &Layout, store: &StateStore, elevate: &dyn Elevate) -> H
         state.pending.as_ref(),
         state.confirmed.as_ref(),
         restore,
+        here,
     );
     match decision {
-        Boot::Nothing => Health::Fine,
+        Boot::Nothing | Boot::KeepWaiting => Health::Fine,
         Boot::Settle | Boot::GiveUp => {
             let _ = store.update(|s| s.pending = None);
             Health::Fine
         }
         Boot::MarkFirstLoginSeen => {
             let _ = store.update(|s| {
-                if let Some(p) = s.pending.as_mut() {
-                    p.stage = PendingStage::FirstLoginSeen;
-                }
+                s.pending = s.pending.take().map(|p| p.first_login_seen(here.clone()));
             });
             Health::Fine
         }
         Boot::RollBack => match elevate.rollback() {
             Ok(()) => {
-                let _ = store.update(|s| s.pending = None);
+                let _ = store.update(|s| {
+                    if let Some(p) = s.pending.take() {
+                        s.refuse(p.version);
+                    }
+                });
                 Health::Restored
             }
             Err(failure) => {

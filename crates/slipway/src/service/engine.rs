@@ -10,9 +10,7 @@ use crate::fetch::{self, Fetched};
 use crate::fsutil::remove_tree;
 use crate::problem::Problem;
 use semver::Version;
-use slipway_core::{
-    Authenticator, Emit, Outcome, Pending, PendingStage, ProgressGate, Standing, standing,
-};
+use slipway_core::{Authenticator, Emit, Offer, Outcome, Pending, ProgressGate, offer};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::Instant;
 use zbus::Connection;
@@ -237,7 +235,8 @@ impl Engine {
         let current = self
             .installed_version()
             .unwrap_or_else(|| Version::new(0, 0, 0));
-        if standing(&current, &fetched.release.version) != Standing::Newer {
+        let refused = self.ctx.store.load().refused;
+        if offer(&current, &fetched.release.version, refused.as_ref()) != Offer::Present {
             self.found_nothing().await;
             return;
         }
@@ -304,10 +303,7 @@ impl Engine {
                 tracing::warn!("installing failed: {failure}");
                 Problem::from_apply(&failure)
             })?;
-        let pending = Pending {
-            version: version.clone(),
-            stage: PendingStage::AwaitingFirstLogin,
-        };
+        let pending = Pending::installed(version.clone(), self.ctx.login.clone());
         let _ = self.ctx.store.update(|s| s.pending = Some(pending));
         let _ = remove_tree(&dir);
         *lock(&self.offer) = None;
@@ -372,6 +368,7 @@ impl Engine {
     }
 
     async fn rollback(self: &Arc<Self>) -> Result<(), Problem> {
+        let left = self.installed_version();
         let engine = Arc::clone(self);
         tokio::task::spawn_blocking(move || engine.ctx.elevate.rollback())
             .await
@@ -383,7 +380,12 @@ impl Engine {
                     other => other,
                 }
             })?;
-        let _ = self.ctx.store.update(|s| s.pending = None);
+        let _ = self.ctx.store.update(|s| {
+            s.pending = None;
+            if let Some(left) = left {
+                s.refuse(left);
+            }
+        });
         let current = self
             .installed_version()
             .map(|v| v.to_string())

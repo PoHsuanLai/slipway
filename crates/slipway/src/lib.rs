@@ -18,6 +18,7 @@ pub mod fsutil;
 pub mod health;
 pub mod keys;
 pub mod layout;
+pub mod login;
 pub mod problem;
 pub mod service;
 pub mod state;

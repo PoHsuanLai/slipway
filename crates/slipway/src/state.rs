@@ -21,9 +21,20 @@ pub struct UserState {
     pub confirmed: Option<Version>,
     /// The install that has not yet been confirmed.
     pub pending: Option<Pending>,
+    /// The newest version that was rolled back; it and anything older is not offered again.
+    pub refused: Option<Version>,
 }
 
 impl UserState {
+    /// Remembers that `version` was rolled back, keeping the newer of it and what was refused before.
+    pub fn refuse(&mut self, version: Version) {
+        let newest = match self.refused.take() {
+            Some(before) if before > version => before,
+            _ => version,
+        };
+        self.refused = Some(newest);
+    }
+
     /// The last check as the schedule wants it.
     pub fn last_attempt(&self) -> Option<Attempt> {
         Some(Attempt {

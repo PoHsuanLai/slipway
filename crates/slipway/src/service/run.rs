@@ -28,7 +28,7 @@ pub enum RunError {
 
 /// Runs the service until interrupted or terminated.
 pub async fn run(ctx: Context) -> Result<(), RunError> {
-    let health = on_start(&ctx.layout, &ctx.store, &*ctx.elevate);
+    let health = on_start(&ctx.layout, &ctx.store, &*ctx.elevate, &ctx.login);
     let settings_command = ctx.config.settings_command.clone();
     let engine = Engine::new(ctx);
     let connection = zbus::connection::Builder::session()?

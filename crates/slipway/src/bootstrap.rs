@@ -27,6 +27,7 @@ pub fn production(config: Config, dirs: &Dirs) -> Context {
         fetch: Arc::new(UreqFetch::new()),
         anchor,
         elevate: Arc::new(Pkexec::new(config.apply_path.clone())),
+        login: crate::login::current(),
         seed,
         config,
     }
