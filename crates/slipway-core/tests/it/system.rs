@@ -19,7 +19,7 @@ fn doc_placing(dest: &str) -> Doc {
 #[test]
 fn a_system_file_is_accepted_only_when_a_rule_names_it() {
     // (destination, accepted)
-    let table: [(&str, bool); 41] = [
+    let table: [(&str, bool); 43] = [
         // The files the desktop places today.
         ("/etc/pam.d/sill", true),
         ("/etc/udev/rules.d/60-sill-ddc.rules", true),
@@ -54,6 +54,9 @@ fn a_system_file_is_accepted_only_when_a_rule_names_it() {
         ("/etc/systemd/system/keycap.service", false),
         ("/usr/lib/udev/rules.d/70-keycap.rules", false),
         ("/usr/bin/keycap", false),
+        // Security profiles are never placed by an update (owner, 2026-10-16).
+        ("/etc/apparmor.d/bwrap", false),
+        ("/etc/apparmor.d/usr.bin.bwrap", false),
         // Beside or below a listed folder.
         ("/etc/udev/rules.d2/70-keycap.rules", false),
         ("/etc/pam.d/sub/sill", false),

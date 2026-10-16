@@ -215,3 +215,22 @@ Nothing from the second slipway lane was compiled or run (only `cargo fmt -p` an
 - The engine test runs `Engine::begin` on a current-thread runtime and polls `snapshot()`.
 - The notification-sender check and the bus activation file are not covered by tests (no bus in a test);
   the orchestrator's session scenarios check them.
+
+Production-audit lane pa-slip (2026-10-16) was also written without a compiler. Look first at:
+
+- `Cargo.lock`: `rustix` (features `std`, `fs`, `process`; already in the lock at 1.1.x) is a new direct dependency
+  of `slipway`; the lock file needs refreshing. `rustix::fs::statvfs`, `rustix::process::{umask, chdir,
+  setrlimit, geteuid}` and `rustix::fs::mkfifoat` (tests) were read against rustix 1.1.5's source only.
+- `service/object.rs` / `service/caller.rs`: the `#[zbus(header)]` and `#[zbus(connection)]` parameters on
+  `Rollback` (copied from sill's picker object), `DBusProxy::get_connection_credentials(..).process_id()`.
+- `fetch/ureq_fetch.rs`: `RequestBuilder::header("Range", String)`, `response.status().as_u16()`,
+  `timeout_recv_response` / `timeout_recv_body` on the config builder (ureq 3.4.2).
+- `apply/step.rs` `Switch` / `Links` rewind, and the `Result<Result<..>, JoinError>` handling in
+  `service/engine.rs` `install`.
+- `tests/it/apply_hardening.rs` changes the process-wide umask for a moment (to 0 and 077) and puts it
+  back to 022; a concurrent test would at worst see a different umask, and none asserts a mode that the code
+  does not set explicitly.
+- The polkit file (`dist/org.quire.slipway.policy`) now holds three actions; `pkexec` finds the one for a
+  program by the `exec.path` annotation, so the three programs must be installed at the paths it names.
+- Not covered by any test (needs a bus or a real polkit): the caller check on `Rollback()` end to end, and the
+  password prompt. The pure parts (`leaf_of`, `is_allowed`) are table tests.

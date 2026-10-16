@@ -64,11 +64,12 @@ pub trait Fetch: Send + Sync {
 
 /// Reads and drops the next `count` bytes of `reader`; a body that ends sooner is an unreachable site.
 pub fn skip(reader: &mut (impl Read + ?Sized), count: u64) -> Result<(), FetchError> {
-    let cut = |why: String| FetchError::Unreachable(why);
-    let skipped =
-        io::copy(&mut reader.take(count), &mut io::sink()).map_err(|e| cut(e.to_string()))?;
+    let skipped = io::copy(&mut reader.take(count), &mut io::sink())
+        .map_err(|e| FetchError::Unreachable(e.to_string()))?;
     if skipped < count {
-        return Err(cut("the connection ended too early".to_owned()));
+        return Err(FetchError::Unreachable(
+            "the connection ended too early".to_owned(),
+        ));
     }
     Ok(())
 }
