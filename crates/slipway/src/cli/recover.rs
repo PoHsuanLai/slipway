@@ -17,7 +17,7 @@ pub fn recover(elevate: &dyn Elevate) -> Reply {
     match elevate.recover() {
         Ok(Recovery::Fine) => Reply::done("Everything is as it should be."),
         Ok(Recovery::Restored(report)) => {
-            report.log();
+            crate::report::log(&report);
             Reply {
                 exit: Exit::Restored,
                 text: RESTORED_SESSION_TEXT.to_owned(),

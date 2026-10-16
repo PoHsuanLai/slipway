@@ -1,6 +1,5 @@
 use crate::support::{Accept, Recipe, Reject, Sandbox, build, v};
 use semver::Version;
-use slipway::apply::Staged;
 use slipway::config::Config;
 use slipway::elevate::{ApplyFailure, Elevate, Recovery};
 use slipway::fetch::{
@@ -11,6 +10,7 @@ use slipway::report::Report;
 use slipway::service::{Context, Engine, Job, Phase, Status};
 use slipway::state::StateStore;
 use slipway_core::LoginSession;
+use slipway_root::apply::Staged;
 use std::collections::BTreeMap;
 use std::io::Cursor;
 use std::path::Path;
@@ -297,7 +297,8 @@ struct SwitchesThenFails {
 
 impl Elevate for SwitchesThenFails {
     fn install(&self, staged: &Path) -> Result<Report, ApplyFailure> {
-        slipway::apply::install(&self.layout, staged, &Accept).expect("the install itself works");
+        slipway_root::apply::install(&self.layout, staged, &Accept)
+            .expect("the install itself works");
         Err(ApplyFailure {
             code: Some(1),
             detail: "a system file could not be placed".into(),

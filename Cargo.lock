@@ -1052,11 +1052,11 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 name = "slipway"
 version = "0.1.0"
 dependencies = [
- "rustix",
  "semver",
  "serde",
  "serde_json",
  "slipway-core",
+ "slipway-root",
  "tar",
  "tempfile",
  "thiserror",
@@ -1083,6 +1083,20 @@ dependencies = [
  "thiserror",
  "time",
  "toml",
+]
+
+[[package]]
+name = "slipway-root"
+version = "0.1.0"
+dependencies = [
+ "rustix",
+ "semver",
+ "slipway-core",
+ "tar",
+ "tempfile",
+ "thiserror",
+ "toml",
+ "zstd",
 ]
 
 [[package]]

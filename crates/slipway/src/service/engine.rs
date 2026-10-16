@@ -4,13 +4,13 @@ use super::context::Context;
 use super::notify::{self, Posted};
 use super::object::{PATH, Updates};
 use super::status::{Phase, Status};
-use crate::apply::Staged;
 use crate::clock::now;
 use crate::fetch::{self, Fetched};
 use crate::fsutil::remove_tree;
 use crate::problem::Problem;
 use semver::Version;
 use slipway_core::{Authenticator, Emit, Offer, Outcome, Pending, ProgressGate, offer};
+use slipway_root::apply::Staged;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::Instant;
 use zbus::Connection;
@@ -320,7 +320,7 @@ impl Engine {
                 return Err(Problem::from_apply(&failure));
             }
         };
-        report.log();
+        crate::report::log(&report);
         self.remember_install(&version);
         let _ = remove_tree(&dir);
         if !report.conflicts.is_empty() {
@@ -410,7 +410,7 @@ impl Engine {
                     other => other,
                 }
             })?;
-        report.log();
+        crate::report::log(&report);
         if !report.conflicts.is_empty() {
             self.tell(notify::LEFT_ALONE_TEXT).await;
         }

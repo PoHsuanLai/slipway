@@ -2,11 +2,11 @@
 //! The root side runs against a temporary install root; the helper's answers are faked.
 
 use crate::support::{Accept, Recipe, Sandbox, build, v};
-use slipway::apply::{NoRelabel, Started, note_confirmed, note_start};
 use slipway::cli::{Exit, confirm, recover, vouch};
 use slipway::elevate::{ApplyFailure, Elevate, Recovery};
 use slipway::report::Report;
 use slipway::state::StateStore;
+use slipway_root::apply::{NoRelabel, Started, note_confirmed, note_start};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::sync::Mutex;

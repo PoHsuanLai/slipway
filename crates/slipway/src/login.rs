@@ -5,8 +5,7 @@ use std::ffi::OsString;
 use std::io;
 use std::path::Path;
 
-/// Where the kernel names this boot of the computer.
-pub const BOOT_ID_PATH: &str = "/proc/sys/kernel/random/boot_id";
+pub use slipway_root::helper::BOOT_ID_PATH;
 /// The variable the session manager sets to the login session's number.
 pub const SESSION_VARIABLE: &str = "XDG_SESSION_ID";
 

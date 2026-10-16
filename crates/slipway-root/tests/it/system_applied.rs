@@ -1,5 +1,7 @@
 use crate::support::{Accept, Recipe, Sandbox, build, read, v};
-use slipway::apply::{Ran, Reach, Relabel, Relabeled, RunProgram, Selinux, install_with, rollback};
+use slipway_root::apply::{
+    Ran, Reach, Relabel, Relabeled, RunProgram, Selinux, install_with, rollback,
+};
 use std::cell::RefCell;
 use std::ffi::OsString;
 use std::os::unix::fs::{PermissionsExt, symlink};
@@ -194,8 +196,8 @@ fn a_system_file_that_cannot_be_placed_leaves_the_earlier_release_current() {
         .install(&build(&placing("0.2.0", "v2")))
         .expect_err("cannot place");
     match &err {
-        slipway::apply::ApplyError::AfterSwitch { back, .. } => {
-            assert_eq!(*back, slipway::apply::Back::Restored, "{err}");
+        slipway_root::apply::ApplyError::AfterSwitch { back, .. } => {
+            assert_eq!(*back, slipway_root::apply::Back::Restored, "{err}");
         }
         other => panic!("wrong error: {other}"),
     }

@@ -3,9 +3,9 @@
 
 use crate::support::{Accept, Recipe, Reject, Sandbox, build, read, v};
 use rustix::fs::{Mode, mkfifoat};
-use slipway::apply::harden::set_umask;
-use slipway::apply::open::open_regular;
-use slipway::apply::{ApplyError, Back, Staged, StagedError, install, rollback};
+use slipway_root::apply::harden::set_umask;
+use slipway_root::apply::open::open_regular;
+use slipway_root::apply::{ApplyError, Back, Staged, StagedError, install, rollback};
 use std::io::Read;
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::Path;
@@ -261,7 +261,7 @@ fn a_system_file_changed_after_it_was_unpacked_is_not_placed_and_the_old_release
         }
         other => panic!("wrong refusal: {other}"),
     }
-    assert_eq!(err.exit_code(), slipway::apply::ExitCode::Unverified);
+    assert_eq!(err.exit_code(), slipway_root::apply::ExitCode::Unverified);
     assert_eq!(read(&sandbox.link(udev)), "v2", "nothing was placed");
     assert_eq!(
         sandbox.current(),

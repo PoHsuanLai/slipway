@@ -3,10 +3,10 @@
 
 use crate::feed_stage::{Memory, served};
 use crate::support::{Accept, v};
-use slipway::apply::Staged;
 use slipway::fetch::{
     Download, Fetch, FetchError, Patience, Source, StageError, prune_cache, stage_with,
 };
+use slipway_root::apply::Staged;
 use std::io::{self, Cursor, Read};
 use std::sync::Mutex;
 use std::time::Duration;

@@ -1,9 +1,9 @@
 //! Building signed-looking bundles and a sandbox to install them into.
 
 use semver::Version;
-use slipway::Layout;
 use slipway_core::{Authenticator, Sha256Hex, SignError};
-use std::path::{Path, PathBuf};
+use slipway_root::Layout;
+use std::path::PathBuf;
 use tempfile::TempDir;
 
 /// Accepts any signature: the signature check itself is tested in slipway-core with a real pair.
@@ -103,28 +103,6 @@ fn pack(items: &[(&str, &str)]) -> Vec<u8> {
     zstd::encode_all(&tar.into_inner().expect("tar")[..], 3).expect("zstd")
 }
 
-/// A tar.zst whose only entry is `path` of the given type (for hostile entries).
-pub fn pack_special(honest: &[(&str, &str)], path: &str, kind: tar::EntryType) -> Vec<u8> {
-    let mut tar = tar::Builder::new(Vec::new());
-    for (p, content) in honest {
-        let mut header = tar::Header::new_gnu();
-        header.set_size(content.len() as u64);
-        header.set_mode(0o644);
-        tar.append_data(&mut header, p, content.as_bytes())
-            .expect("file");
-    }
-    let mut header = tar::Header::new_gnu();
-    header.set_entry_type(kind);
-    header.set_size(0);
-    header.set_mode(0o777);
-    header
-        .set_link_name_literal(b"/etc/passwd")
-        .expect("link name");
-    tar.append_data(&mut header, path, std::io::empty())
-        .expect("special");
-    zstd::encode_all(&tar.into_inner().expect("tar")[..], 3).expect("zstd")
-}
-
 /// The release.toml for a bundle.
 pub fn describe(
     version: &str,
@@ -156,21 +134,6 @@ pub fn describe(
 
 pub fn build(recipe: &Recipe<'_>) -> Built {
     let bundle = pack(recipe.packed.as_deref().unwrap_or(&recipe.listed));
-    Built {
-        version: v(recipe.version),
-        release_toml: describe(
-            recipe.version,
-            &recipe.listed,
-            &recipe.exports,
-            &recipe.system,
-            &bundle,
-        ),
-        bundle,
-    }
-}
-
-/// Builds a release around exactly these bundle bytes.
-pub fn build_around(recipe: &Recipe<'_>, bundle: Vec<u8>) -> Built {
     Built {
         version: v(recipe.version),
         release_toml: describe(
@@ -218,35 +181,11 @@ impl Sandbox {
     pub fn install(
         &self,
         built: &Built,
-    ) -> Result<slipway::apply::Applied, slipway::apply::ApplyError> {
-        slipway::apply::install(&self.layout, &self.stage(built), &Accept)
-    }
-
-    /// Where an export link lives in the stand-in for `/`.
-    pub fn link(&self, link: &str) -> PathBuf {
-        self.layout.export_path(link)
+    ) -> Result<slipway_root::apply::Applied, slipway_root::apply::ApplyError> {
+        slipway_root::apply::install(&self.layout, &self.stage(built), &Accept)
     }
 
     pub fn current(&self) -> Option<Version> {
         self.layout.installed().expect("installed").current
     }
-
-    pub fn previous(&self) -> Option<Version> {
-        self.layout.installed().expect("installed").previous
-    }
-
-    pub fn releases(&self) -> Vec<String> {
-        let mut names: Vec<String> = std::fs::read_dir(self.layout.releases_dir())
-            .map(|d| {
-                d.map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
-                    .collect()
-            })
-            .unwrap_or_default();
-        names.sort();
-        names
-    }
-}
-
-pub fn read(path: &Path) -> String {
-    std::fs::read_to_string(path).expect("read")
 }

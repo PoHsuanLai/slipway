@@ -1,6 +1,6 @@
 use crate::support::{Accept, Recipe, Reject, Sandbox, build, build_around, pack_special, v};
-use slipway::apply::{ApplyError, ExitCode, StagedError, install};
 use slipway_core::AuditError;
+use slipway_root::apply::{ApplyError, ExitCode, StagedError, install};
 
 /// After a refusal the system is as it was: the given release (if any) is current, and no unfinished
 /// unpack or new release directory is left.

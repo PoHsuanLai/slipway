@@ -1,5 +1,5 @@
 use crate::support::{Accept, Recipe, Sandbox, build, read, v};
-use slipway::apply::{ApplyError, ExitCode, rollback};
+use slipway_root::apply::{ApplyError, ExitCode, rollback};
 
 #[test]
 fn rollback_swaps_back_and_forth_and_moves_the_links() {

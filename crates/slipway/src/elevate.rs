@@ -1,9 +1,9 @@
 //! Running the privileged helpers through `pkexec`: one installs a staged release, one goes back to the
 //! previous release (and asks for the administrator's password), one keeps the root-side health record.
 
-use crate::apply::ExitCode;
 use crate::config::Config;
 use crate::report::Report;
+use slipway_root::apply::ExitCode;
 use std::ffi::OsStr;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};

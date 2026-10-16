@@ -12,20 +12,9 @@ publish.workspace = true
 name = "slipway"
 path = "src/main.rs"
 
-[[bin]]
-name = "slipway-apply"
-path = "src/bin/slipway_apply.rs"
-
-[[bin]]
-name = "slipway-rollback"
-path = "src/bin/slipway_rollback.rs"
-
-[[bin]]
-name = "slipway-health"
-path = "src/bin/slipway_health.rs"
-
 [dependencies]
 slipway-core.workspace = true
+slipway-root.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -33,9 +22,6 @@ toml.workspace = true
 semver.workspace = true
 time.workspace = true
 ureq.workspace = true
-rustix.workspace = true
-tar.workspace = true
-zstd.workspace = true
 zbus.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -43,6 +29,8 @@ tracing-subscriber.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+tar.workspace = true
+zstd.workspace = true
 
 [lints]
 workspace = true

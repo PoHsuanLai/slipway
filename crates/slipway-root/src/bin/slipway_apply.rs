@@ -4,8 +4,8 @@
 //! signature and every digest are checked again here against the key installed on this computer.
 //! The install root and key come from `/etc/slipway/config.toml`, never from the caller. It cannot go
 //! back to an earlier release (`slipway-rollback` does, behind a password). The work is in
-//! `slipway::helper`.
+//! `slipway_root::helper`.
 
 fn main() -> std::process::ExitCode {
-    slipway::helper::install_main()
+    slipway_root::helper::install_main()
 }

@@ -60,7 +60,7 @@ pub fn on_start(
             // the marker stays, and the next start asks again.
             Ok(Recovery::Fine) => Health::Fine,
             Ok(Recovery::Restored(report)) => {
-                report.log();
+                crate::report::log(&report);
                 store.remember(|s| {
                     if let Some(p) = s.pending.take() {
                         s.refuse(p.version);

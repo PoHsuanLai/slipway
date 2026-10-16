@@ -2,9 +2,12 @@
 resolver = "3"
 # slipway-core is pure (no network, no D-Bus, no filesystem writes): the release index, versions,
 # signature and digest checks, the install plan and the daily-check schedule. slipway does the I/O:
-# download, staging, the atomic switch and rollback, the session D-Bus service and the command line.
+# download, the session D-Bus service and the command line. slipway-root is the part that runs as root:
+# the atomic switch, rollback and the health record, as the three small programs slipway-apply,
+# slipway-rollback and slipway-health. It links neither the network client nor the bus nor the async
+# runtime.
 # scripts/check-boundary.sh checks the edge.
-members = ["crates/slipway-core", "crates/slipway"]
+members = ["crates/slipway-core", "crates/slipway-root", "crates/slipway"]
 
 [workspace.package]
 version = "0.1.0"
@@ -16,6 +19,7 @@ publish = false
 
 [workspace.dependencies]
 slipway-core = { path = "crates/slipway-core" }
+slipway-root = { path = "crates/slipway-root" }
 
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }

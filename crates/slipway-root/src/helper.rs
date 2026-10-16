@@ -3,21 +3,23 @@
 //!
 //! Every program does the same first thing: reset the process state it inherited from whoever ran it
 //! ([`crate::apply::harden`]), before anything is created or read. The root, the key and the helper's
-//! other settings come from `/etc/slipway/config.toml` only, never from the caller.
+//! settings come from `/etc/slipway/config.toml` only, never from the caller.
 
 use crate::apply::harden::reset_process;
 use crate::apply::{
     Applied, ApplyError, ExitCode as Code, Selinux, Started, install_with, note_confirmed,
     note_start, rollback_with,
 };
-use crate::config::{Config, SYSTEM_CONFIG_PATH};
 use crate::keys::load_key;
 use crate::layout::Layout;
-use crate::login::BOOT_ID_PATH;
 use crate::report::Report;
+use crate::settings::{RootSettings, SYSTEM_CONFIG_PATH};
 use slipway_core::PublicKey;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+
+/// Where the kernel names this boot of the computer.
+pub const BOOT_ID_PATH: &str = "/proc/sys/kernel/random/boot_id";
 
 const INSTALL_USAGE: &str = "usage: slipway-apply <staged folder>
 
@@ -118,16 +120,16 @@ struct Prepared {
 /// Resets the process, then reads the system settings and the key. `Err` carries the exit code, after
 /// the reason was printed.
 fn prepare(program: &str) -> Result<Prepared, Code> {
-    let config = Config::load(Path::new(SYSTEM_CONFIG_PATH)).map_err(|e| {
+    let settings = RootSettings::load(Path::new(SYSTEM_CONFIG_PATH)).map_err(|e| {
         eprintln!("{program}: {e}");
         Code::Failed
     })?;
-    let key = load_key(&config.pubkey_path).map_err(|e| {
+    let key = load_key(&settings.pubkey_path).map_err(|e| {
         eprintln!("{program}: {e}");
         Code::NoKey
     })?;
     Ok(Prepared {
-        layout: Layout::new(config.root),
+        layout: Layout::new(settings.root),
         key,
     })
 }

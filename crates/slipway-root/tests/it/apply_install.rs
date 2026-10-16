@@ -91,10 +91,10 @@ fn a_release_that_is_not_newer_is_refused_and_changes_nothing() {
             .install(&build(&Recipe::new(version)))
             .expect_err(version);
         assert!(
-            matches!(err, slipway::apply::ApplyError::Plan(_)),
+            matches!(err, slipway_root::apply::ApplyError::Plan(_)),
             "{version}: {err}"
         );
-        assert_eq!(err.exit_code(), slipway::apply::ExitCode::Refused);
+        assert_eq!(err.exit_code(), slipway_root::apply::ExitCode::Refused);
     }
     assert_eq!(sandbox.current(), Some(v("0.2.0")));
     assert_eq!(sandbox.releases(), vec!["0.2.0"]);
@@ -135,7 +135,7 @@ fn a_second_update_at_the_same_time_is_turned_away() {
     let err = sandbox
         .install(&build(&Recipe::new("0.1.0")))
         .expect_err("busy");
-    assert_eq!(err.exit_code(), slipway::apply::ExitCode::Busy);
+    assert_eq!(err.exit_code(), slipway_root::apply::ExitCode::Busy);
     drop(held);
     sandbox
         .install(&build(&Recipe::new("0.1.0")))

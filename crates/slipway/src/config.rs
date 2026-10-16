@@ -5,17 +5,18 @@
 //! `pubkey_path`. The privileged helper reads only that file, and the daemon reads it first, so the two
 //! cannot disagree. The person's own file (`$XDG_CONFIG_HOME/slipway/config.toml`) may only change what
 //! is shown: `settings_command` and `name`; anything else in it is ignored.
+//!
+//! The privileged programs read just `root` and `pubkey_path` from the system file
+//! (`slipway_root::settings`); the names and defaults of those two are defined there.
 
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use std::path::{Path, PathBuf};
 
-/// The default install root.
-pub const DEFAULT_ROOT: &str = "/opt/quire";
+pub use slipway_root::settings::{DEFAULT_PUBKEY_PATH, DEFAULT_ROOT, SYSTEM_CONFIG_PATH};
+
 /// The default release index: the public releases of the desktop.
 pub const DEFAULT_INDEX_URL: &str = "https://github.com/PoHsuanLai/desktop-releases/releases";
-/// Where the trusted public key is installed.
-pub const DEFAULT_PUBKEY_PATH: &str = "/usr/share/slipway/release.pub";
 /// What opens the Software Update page.
 pub const DEFAULT_SETTINGS_COMMAND: &str = "detent --page software-update";
 /// The name shown for the software.
@@ -29,8 +30,6 @@ pub const DEFAULT_HEALTH_PATH: &str = "/usr/libexec/slipway-health";
 /// Who may ask the update service to go back to the previous version: the shell's unit, and the
 /// Settings app (by its app id) that shows the Software Update page.
 pub const DEFAULT_CALLERS: [&str; 2] = ["sill.service", "org.quire.Settings"];
-/// The system-wide configuration the privileged helper reads (never the person's own file).
-pub const SYSTEM_CONFIG_PATH: &str = "/etc/slipway/config.toml";
 
 /// The settings, each with a default.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]

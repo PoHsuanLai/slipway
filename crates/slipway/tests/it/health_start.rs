@@ -27,7 +27,7 @@ impl Elevate for Recording<'_> {
     /// The health helper, having decided the release has used up its boots: it goes back.
     fn recover(&self) -> Result<Recovery, ApplyFailure> {
         self.calls.lock().expect("lock").push("recover");
-        slipway::apply::rollback(&self.sandbox.layout, &Accept)
+        slipway_root::apply::rollback(&self.sandbox.layout, &Accept)
             .map(|applied| Recovery::Restored(Report::from(&applied)))
             .map_err(|e| ApplyFailure {
                 code: Some(e.exit_code() as i32),

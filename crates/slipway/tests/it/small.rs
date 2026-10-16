@@ -1,10 +1,8 @@
-use crate::support::{Recipe, Sandbox, build, v};
+use crate::support::v;
 use slipway::cli::{Command, parse};
 use slipway::config::{Config, ConfigError};
 use slipway::dirs::Dirs;
 use slipway::elevate::ApplyFailure;
-use slipway::fsutil::{switch_link, write_atomic};
-use slipway::keys::{KeyError, from_compiled, load_key};
 use slipway::login;
 use slipway::problem::Problem;
 use slipway::service::is_from_owner;
@@ -272,28 +270,6 @@ fn the_state_file_round_trips_and_is_replaced_whole() {
 }
 
 #[test]
-fn keys_load_from_a_file_or_the_compiled_in_text_and_say_why_not() {
-    const KEY: &str = "RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3";
-    let dir = tempfile::tempdir().expect("tempdir");
-    let file = dir.path().join("release.pub");
-    std::fs::write(
-        &file,
-        format!("untrusted comment: minisign public key\n{KEY}\n"),
-    )
-    .expect("write");
-    assert!(load_key(&file).is_ok());
-    std::fs::write(&file, "garbage").expect("write");
-    assert!(matches!(load_key(&file), Err(KeyError::Unreadable)));
-    assert!(matches!(from_compiled(None), Err(KeyError::Missing)));
-    assert!(matches!(from_compiled(Some("  ")), Err(KeyError::Missing)));
-    assert!(matches!(
-        from_compiled(Some("nonsense")),
-        Err(KeyError::Unreadable)
-    ));
-    assert!(from_compiled(Some(KEY)).is_ok());
-}
-
-#[test]
 fn what_a_person_reads_names_no_tool_or_protocol() {
     let failure = |code| ApplyFailure {
         code,
@@ -341,38 +317,4 @@ fn what_a_person_reads_names_no_tool_or_protocol() {
             assert!(!text.contains(word), "{text:?} mentions {word}");
         }
     }
-}
-
-#[test]
-fn links_are_switched_whole_and_files_replaced_whole() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let link = dir.path().join("current");
-    switch_link(&link, std::path::Path::new("releases/1")).expect("first");
-    switch_link(&link, std::path::Path::new("releases/2")).expect("second");
-    assert_eq!(
-        std::fs::read_link(&link).expect("link"),
-        PathBuf::from("releases/2")
-    );
-    assert!(!dir.path().join("current.new").exists());
-
-    let file = dir.path().join("a/b.txt");
-    write_atomic(&file, b"one").expect("write");
-    write_atomic(&file, b"two").expect("replace");
-    assert_eq!(std::fs::read_to_string(&file).expect("read"), "two");
-    assert!(!dir.path().join("a/b.txt.new").exists());
-}
-
-#[test]
-fn installed_ignores_what_is_not_a_release() {
-    let sandbox = Sandbox::new();
-    sandbox
-        .install(&build(&Recipe::new("0.1.0")))
-        .expect("install");
-    let releases = sandbox.layout.releases_dir();
-    std::fs::create_dir(releases.join("not-a-version")).expect("dir");
-    std::fs::create_dir(releases.join("0.2.0.partial")).expect("dir");
-    std::fs::write(releases.join("0.3.0"), "a file, not a release").expect("file");
-    let installed = sandbox.layout.installed().expect("installed");
-    assert_eq!(installed.releases, vec![v("0.1.0")]);
-    assert_eq!(installed.current, Some(v("0.1.0")));
 }
