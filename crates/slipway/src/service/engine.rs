@@ -4,6 +4,7 @@ use super::context::Context;
 use super::notify::{self, Posted};
 use super::object::{PATH, Updates};
 use super::status::{Phase, Status};
+use super::wanted::Wanted;
 use crate::clock::now;
 use crate::fetch::{self, Fetched};
 use crate::fsutil::remove_tree;
@@ -16,12 +17,13 @@ use std::time::Instant;
 use zbus::Connection;
 
 /// A request to the engine.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Job {
     /// Look for a newer version.
     Check,
-    /// Install the newer version (looking first if none is known).
-    Install,
+    /// Install the newer version (looking first if none is known), provided it is the one the
+    /// person was shown.
+    Install(Wanted),
     /// Go back to the previous version.
     Rollback,
 }
@@ -89,10 +91,16 @@ impl Engine {
 
     /// Starts `job` in the background. Refused while other work is in progress.
     pub async fn begin(self: &Arc<Self>, job: Job) -> Result<(), Problem> {
-        let first = match job {
+        let first = match &job {
             Job::Check => Phase::Checking,
-            Job::Install if lock(&self.offer).is_some() => Phase::Downloading,
-            Job::Install => Phase::Checking,
+            Job::Install(wanted) => match lock(&self.offer).as_ref() {
+                // A different version is on offer than the one shown: refuse now, touching nothing.
+                Some(fetched) => {
+                    wanted.accepts(&fetched.release.version)?;
+                    Phase::Downloading
+                }
+                None => Phase::Checking,
+            },
             Job::Rollback => Phase::Installing,
         };
         let old = {
@@ -114,7 +122,7 @@ impl Engine {
     async fn run(self: Arc<Self>, job: Job) {
         let result = match job {
             Job::Check => self.check().await,
-            Job::Install => self.install().await,
+            Job::Install(wanted) => self.install(&wanted).await,
             Job::Rollback => self.rollback().await,
         };
         if let Err(problem) = result {
@@ -280,15 +288,16 @@ impl Engine {
         }
     }
 
-    async fn install(self: &Arc<Self>) -> Result<(), Problem> {
+    async fn install(self: &Arc<Self>, wanted: &Wanted) -> Result<(), Problem> {
         let auth = self.authenticator()?;
         if lock(&self.offer).is_none() {
             self.check().await?;
         }
-        // The check above has already settled on Idle when there is nothing newer.
+        // Nothing newer on offer after the check: not the version the person was shown either.
         let Some(fetched) = lock(&self.offer).clone() else {
-            return Ok(());
+            return Err(Problem::VersionChanged);
         };
+        wanted.accepts(&fetched.release.version)?;
         let version = fetched.release.version.clone();
         let dir = self.ctx.cache_dir.join(version.to_string());
         self.change(|s| {

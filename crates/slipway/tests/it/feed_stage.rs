@@ -6,8 +6,9 @@ use slipway::fetch::{
     Download, FeedError, Fetch, FetchError, Patience, Source, StageError, latest, of_version,
     stage, stage_with,
 };
+use slipway::problem::Problem;
 use slipway::report::Report;
-use slipway::service::{Context, Engine, Job, Phase, Status};
+use slipway::service::{Context, Engine, Job, Phase, Status, Wanted};
 use slipway::state::StateStore;
 use slipway_core::LoginSession;
 use slipway_root::apply::Staged;
@@ -334,11 +335,91 @@ fn an_install_that_failed_after_the_switch_is_still_watched_by_the_health_check(
         .expect("runtime");
     runtime.block_on(async {
         let engine = engine_with(&sandbox, "0.2.0", &store, helper);
-        let status = ran(&engine, Job::Install).await;
+        let status = ran(&engine, Job::Install(wanting("0.2.0"))).await;
         assert_eq!(status.phase, Phase::Failed, "{status:?}");
         assert_eq!(status.current, "0.2.0", "what runs is what the page says");
     });
     assert_eq!(sandbox.current(), Some(v("0.2.0")));
     let pending = store.load().pending.expect("the health marker was written");
     assert_eq!(pending.version, v("0.2.0"));
+}
+
+fn wanting(text: &str) -> Wanted {
+    Wanted::parse(text).expect("a version")
+}
+
+fn block_on<T>(work: impl std::future::Future<Output = T>) -> T {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("runtime")
+        .block_on(work)
+}
+
+#[test]
+fn the_version_the_person_was_shown_is_installed() {
+    // Whether the offer was already known or the install looked first.
+    for looked_first in [true, false] {
+        let sandbox = Sandbox::new();
+        sandbox
+            .install(&build(&Recipe::new("0.1.0")))
+            .expect("install");
+        let store = StateStore::new(sandbox.tmp.path().join("state.toml"));
+        let engine = engine_serving(&sandbox, "0.2.0", &store);
+        let status = block_on(async {
+            if looked_first {
+                checked(&engine).await;
+            }
+            ran(&engine, Job::Install(wanting("0.2.0"))).await
+        });
+        assert_eq!(status.phase, Phase::Installed, "{status:?}");
+        assert_eq!(status.current, "0.2.0");
+    }
+}
+
+#[test]
+fn a_newer_release_than_the_one_shown_is_refused_before_anything_is_staged() {
+    let sandbox = Sandbox::new();
+    sandbox
+        .install(&build(&Recipe::new("0.1.0")))
+        .expect("install");
+    let store = StateStore::new(sandbox.tmp.path().join("state.toml"));
+    let cache = sandbox.tmp.path().join("cache");
+
+    // The offer is known: the call itself is refused and the status is left as it was.
+    let engine = engine_serving(&sandbox, "0.3.0", &store);
+    block_on(async {
+        let known = checked(&engine).await;
+        assert_eq!(known.phase, Phase::Available, "{known:?}");
+        let refused = engine
+            .begin(Job::Install(wanting("0.2.0")))
+            .await
+            .expect_err("the person saw 0.2.0, 0.3.0 is on offer");
+        assert_eq!(refused, Problem::VersionChanged);
+        assert_eq!(engine.snapshot(), known, "nothing moved");
+    });
+    assert!(!cache.join("0.3.0").exists(), "nothing was downloaded");
+    assert_eq!(sandbox.current(), Some(v("0.1.0")));
+
+    // The offer is not known yet: the install looks, sees another version, and stops there.
+    let fresh = engine_serving(&sandbox, "0.3.0", &store);
+    let status = block_on(ran(&fresh, Job::Install(wanting("0.2.0"))));
+    assert_eq!(status.phase, Phase::Failed, "{status:?}");
+    assert_eq!(status.problem, Problem::VersionChanged.plain());
+    assert!(!cache.join("0.3.0").exists(), "nothing was downloaded");
+    assert_eq!(sandbox.current(), Some(v("0.1.0")));
+}
+
+#[test]
+fn naming_a_version_when_nothing_is_on_offer_installs_nothing() {
+    let sandbox = Sandbox::new();
+    sandbox
+        .install(&build(&Recipe::new("0.2.0")))
+        .expect("install");
+    let store = StateStore::new(sandbox.tmp.path().join("state.toml"));
+    let engine = engine_serving(&sandbox, "0.2.0", &store);
+    let status = block_on(ran(&engine, Job::Install(wanting("0.3.0"))));
+    assert_eq!(status.phase, Phase::Failed, "{status:?}");
+    assert_eq!(status.problem, Problem::VersionChanged.plain());
+    assert_eq!(sandbox.current(), Some(v("0.2.0")));
 }

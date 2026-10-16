@@ -2,6 +2,8 @@
 
 use super::caller;
 use super::engine::{Engine, Job};
+use super::refusal::InstallError;
+use super::wanted::Wanted;
 use std::path::PathBuf;
 use std::sync::Arc;
 use zbus::message::Header;
@@ -48,9 +50,16 @@ impl Updates {
         self.start(Job::Check).await
     }
 
-    /// Downloads (if needed), verifies and installs the newer version; returns at once.
-    async fn install(&self) -> fdo::Result<()> {
-        self.start(Job::Install).await
+    /// Downloads (if needed), verifies and installs the newer version; returns at once. `version` is
+    /// the version the caller showed the person: when the one that would be installed is another
+    /// (a newer release arrived meanwhile), nothing starts and the error is
+    /// `org.quire.Updates1.Error.VersionChanged`; text that is not a version is `...Error.NotAVersion`.
+    async fn install(&self, version: String) -> Result<(), InstallError> {
+        let wanted = Wanted::parse(&version)?;
+        self.engine
+            .begin(Job::Install(wanted))
+            .await
+            .map_err(InstallError::from)
     }
 
     /// Goes back to the previous version; returns at once. Only the shell and Settings may ask (the

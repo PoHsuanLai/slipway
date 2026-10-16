@@ -23,6 +23,10 @@ pub enum Problem {
     NothingToInstall,
     /// There is nothing to go back to.
     NothingToRestore,
+    /// The version a caller named is not a version at all.
+    NotAVersion,
+    /// The update on offer is not the one the caller showed the person.
+    VersionChanged,
     /// Anything else.
     Other,
 }
@@ -45,6 +49,10 @@ impl Problem {
             Self::Busy => "An update is already in progress.",
             Self::NothingToInstall => "There is no update to install.",
             Self::NothingToRestore => "There is no earlier version to go back to.",
+            Self::NotAVersion => "That is not a version of the software.",
+            Self::VersionChanged => {
+                "A different update is on offer now. Look at it again before installing."
+            }
             Self::Other => "The update could not be installed. Try again later.",
         }
     }

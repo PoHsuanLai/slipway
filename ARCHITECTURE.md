@@ -200,13 +200,20 @@ leaves the state at "installing" for ever.
 Properties (all emit `PropertiesChanged`): `State` (idle, checking, available, downloading, ready,
 installing, installed, failed), `Current`, `Available` ("" when none), `Notes`, `Size` (bytes),
 `Progress` (permille), `LastChecked` (unix seconds, 0 never), `Problem` (plain words).
-Methods: `Check()`, `Install()`, `Rollback()`. `Rollback()` is answered only for a caller that is the
+Methods: `Check()`, `Install(version: s)`, `Rollback()`. `Rollback()` is answered only for a caller that is the
 shell's unit or the Settings app (`callers` in the system settings, default `sill.service`, `org.quire.Settings` (an app a launcher started)
 and `org.quire.Settings.service` (the same app started by bus activation, which runs as that unit); the bus names the caller's process and `/proc/<pid>/cgroup` the unit or app scope it runs in,
 `service/caller.rs`), and the system then asks for the administrator's password. The caller check keeps a stray
 program from putting a password prompt in front of the person; it is not a boundary (a program of the person can
-start itself in a scope of its choosing), the password is. `Install()` is open to any caller on the person's own
-session bus, as before: it can only install a newer release signed by the project. Each returns at once, having already moved `State`
+start itself in a scope of its choosing), the password is. `Install(version)` is open to any caller on the person's own
+session bus, as before: it can only install a newer release signed by the project. The caller names the
+version it showed the person (a semver string of at most `MAX_VERSION_BYTES` = 64 bytes, `service/wanted.rs`); the
+service installs only when the version it would install is that one, so a release that arrived between showing
+and pressing is never installed unseen. A mismatch (or no update on offer) is refused with the error
+`org.quire.Updates1.Error.VersionChanged` before anything is downloaded or staged; text that is not a version
+is `org.quire.Updates1.Error.NotAVersion`; anything else that stops the start (work in progress) is
+`org.quire.Updates1.Error.Refused`. Each error carries a plain sentence as its message (`service/refusal.rs`).
+The command line reads `Available` (checking first when it is empty) and passes that. Each returns at once, having already moved `State`
 (so a caller that polls `State` never sees the old value after the call returns), and refuses with
 a plain sentence when work is in progress; the work runs on a spawned task and the blocking parts
 (ureq, the helper) on blocking threads.

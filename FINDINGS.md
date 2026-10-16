@@ -18,7 +18,7 @@ Departures from the plan, standing facts and open items. An entry names the cond
    `slipway` use an accept-all or reject-all `Authenticator` instead of signing their own
    `release.toml`; the pure signature path is exercised only through the documentation pair. Closes when a
    CI-produced `release.toml` + `.minisig` pair is added as a fixture.
-3. **Methods return at once.** `Check()`, `Install()` and `Rollback()` return as soon as the work has
+3. **Methods return at once.** `Check()`, `Install(version)` and `Rollback()` return as soon as the work has
    started (a long download would outlast a bus call's patience); callers watch `State`. The CLI polls
    it every quarter second.
 4. **"1 per 100 permille or 250 ms".** Read as: announce progress when it crosses a 100-permille step,
@@ -105,9 +105,10 @@ Departures from the plan, standing facts and open items. An entry names the cond
     with no signature check on the way down, so it is its own program and polkit action (ARCHITECTURE s.5), and
     the service answers `Rollback()` only for the shell's unit and the Settings app (`callers`). Not closed here:
     "a floor version a rollback may not go below" in root-owned state, which would make a security fix
-    un-roll-back-able even with the password. `Install()` over the bus is not gated (the daemon's `Install()`
-    starting an update nobody clicked is limited to a newer signed release, which is what the daily check would
-    offer anyway). The CLI `slipway rollback` from a terminal is refused by the caller check (it runs in a
+    un-roll-back-able even with the password. `Install(version)` over the bus is not gated by caller: starting an update nobody clicked is
+    limited to a newer signed release, which is what the daily check would offer anyway, and (since the
+    version argument, ROOT-04) to the exact version the caller names, so a release that arrived after the person
+    was shown another is never installed unseen (ARCHITECTURE s.6). The CLI `slipway rollback` from a terminal is refused by the caller check (it runs in a
     terminal's scope); the way back there is `pkexec /usr/libexec/slipway-rollback`.
 
 ## Open questions

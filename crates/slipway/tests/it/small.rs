@@ -5,7 +5,7 @@ use slipway::dirs::Dirs;
 use slipway::elevate::ApplyFailure;
 use slipway::login;
 use slipway::problem::Problem;
-use slipway::service::is_from_owner;
+use slipway::service::{InstallError, MAX_VERSION_BYTES, Wanted, is_from_owner};
 use slipway::state::StateStore;
 use slipway_core::{Attempt, Outcome, UnixSeconds};
 use std::ffi::OsString;
@@ -297,6 +297,8 @@ fn what_a_person_reads_names_no_tool_or_protocol() {
         Problem::Busy,
         Problem::NothingToInstall,
         Problem::NothingToRestore,
+        Problem::NotAVersion,
+        Problem::VersionChanged,
         Problem::Other,
     ];
     for problem in all {
@@ -316,5 +318,56 @@ fn what_a_person_reads_names_no_tool_or_protocol() {
         ] {
             assert!(!text.contains(word), "{text:?} mentions {word}");
         }
+    }
+}
+
+#[test]
+fn only_a_real_version_of_sane_length_can_be_named_for_an_install() {
+    let long = format!("1.0.0-{}", "a".repeat(MAX_VERSION_BYTES));
+    let table = [
+        ("0.2.0", true),
+        ("10.20.30", true),
+        ("1.2.3-rc.1", true),
+        ("", false),
+        ("0.2", false),
+        ("v0.2.0", false),
+        (" 0.2.0", false),
+        ("0.2.0\n", false),
+        ("latest", false),
+        ("1.2.3.4", false),
+        ("99999999999999999999.0.0", false),
+        (long.as_str(), false),
+    ];
+    for (text, ok) in table {
+        assert_eq!(Wanted::parse(text).is_ok(), ok, "{text:?}");
+    }
+    assert_eq!(Wanted::parse("nope"), Err(Problem::NotAVersion));
+    let shown = Wanted::parse("0.2.0").expect("version");
+    assert_eq!(shown.accepts(&v("0.2.0")), Ok(()));
+    for other in ["0.2.1", "0.3.0", "0.1.0", "0.2.0-rc.1"] {
+        assert_eq!(
+            shown.accepts(&v(other)),
+            Err(Problem::VersionChanged),
+            "{other}"
+        );
+    }
+}
+
+#[test]
+fn a_refused_install_has_a_name_of_its_own_and_a_plain_sentence() {
+    use zbus::DBusError;
+    let table = [
+        (Problem::NotAVersion, "org.quire.Updates1.Error.NotAVersion"),
+        (
+            Problem::VersionChanged,
+            "org.quire.Updates1.Error.VersionChanged",
+        ),
+        (Problem::Busy, "org.quire.Updates1.Error.Refused"),
+        (Problem::Offline, "org.quire.Updates1.Error.Refused"),
+    ];
+    for (problem, name) in table {
+        let error = InstallError::from(problem);
+        assert_eq!(error.name().as_str(), name);
+        assert_eq!(error.description(), Some(problem.plain()));
     }
 }

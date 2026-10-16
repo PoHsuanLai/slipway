@@ -18,8 +18,8 @@ const WORK_LIMIT: Duration = Duration::from_secs(2 * 60 * 60);
 pub trait UpdatesClient {
     /// Look for a newer version.
     fn check(&self) -> zbus::Result<()>;
-    /// Install the newer version.
-    fn install(&self) -> zbus::Result<()>;
+    /// Install the newer version, which must be `version`, the one the person was shown.
+    fn install(&self, version: &str) -> zbus::Result<()>;
     /// Go back to the previous version.
     fn rollback(&self) -> zbus::Result<()>;
     /// Where the flow is.
@@ -155,8 +155,40 @@ async fn status(proxy: &UpdatesClientProxy<'_>, config: &Config) -> zbus::Result
     Ok(Reply::done(format!("{installed} {}", newer.text)))
 }
 
+/// What `install` goes ahead with: the version on offer, or the answer that ends the command.
+enum OnOffer {
+    Version(String),
+    Answer(Reply),
+}
+
+/// The version on offer, after a check when none is known yet.
+async fn on_offer(proxy: &UpdatesClientProxy<'_>) -> zbus::Result<OnOffer> {
+    let known = proxy.available().await?;
+    if !known.is_empty() {
+        return Ok(OnOffer::Version(known));
+    }
+    proxy.check().await?;
+    match wait(proxy, Until::CheckDone, CHECK_LIMIT, |_| {}).await? {
+        Some(state) if state == "failed" => Ok(OnOffer::Answer(problem_reply(proxy).await?)),
+        Some(_) => match proxy.available().await? {
+            found if found.is_empty() => Ok(OnOffer::Answer(Reply {
+                exit: Exit::NothingToDo,
+                text: "Your software is up to date.".to_owned(),
+            })),
+            found => Ok(OnOffer::Version(found)),
+        },
+        None => Ok(OnOffer::Answer(Reply::failed(
+            "Checking is taking longer than expected.",
+        ))),
+    }
+}
+
 async fn install(proxy: &UpdatesClientProxy<'_>, config: &Config) -> zbus::Result<Reply> {
-    proxy.install().await?;
+    let version = match on_offer(proxy).await? {
+        OnOffer::Version(version) => version,
+        OnOffer::Answer(reply) => return Ok(reply),
+    };
+    proxy.install(&version).await?;
     let announce = |state: &str| match state {
         "downloading" => eprintln!("Downloading..."),
         "installing" => eprintln!("Installing..."),
