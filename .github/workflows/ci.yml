@@ -1,6 +1,6 @@
 name: ci
 
-# Linux checks: formatting, lints, licences and advisories of the dependencies, the crate boundaries
+# Linux checks: formatting, lints, licences, advisories, bans and sources of the dependencies, the crate boundaries
 # (scripts/check-boundary.sh: the programs that run as root must not link the network client or the
 # bus) and the tests. The advisories check reads the RustSec database, so it also runs once a week
 # without a push: a new advisory against a locked dependency should not wait for the next change.
@@ -39,6 +39,8 @@ jobs:
         run: cargo deny check licenses
       - name: advisories
         run: cargo deny check advisories
+      - name: bans and sources
+        run: cargo deny check bans sources
 
   test:
     runs-on: ubuntu-latest

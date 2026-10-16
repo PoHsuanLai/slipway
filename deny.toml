@@ -5,6 +5,8 @@
 #   cargo deny check advisories   a dependency with a RustSec advisory (vulnerability, unmaintained
 #                                 crate, unsound code) or a yanked version fails the gate; the
 #                                 programs that run as root are built from this lock file
+#   cargo deny check bans sources a wildcard version requirement, or a dependency from anywhere but
+#                                 crates.io and the one git repository named below, fails the gate
 
 [graph]
 targets = ["x86_64-unknown-linux-gnu"]
@@ -50,3 +52,17 @@ confidence-threshold = 0.9
 #
 # What stays out of that list is strong copyleft: GPL, AGPL, EUPL. Those would change what this
 # project may be distributed as, and a dependency arriving under one should stop the build.
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# The workspace's own crates are path dependencies without a version.
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# peephole: which program is calling the update service (the service only; the root programs never link it,
+# scripts/check-boundary.sh).
+allow-git = ["https://github.com/PoHsuanLai/peephole"]
