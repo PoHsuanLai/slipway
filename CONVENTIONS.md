@@ -6,7 +6,8 @@ public item, tests that never touch the real system. `ARCHITECTURE.md` here has 
 the seams.
 
 1. **Library first.** `slipway-core` is pure and usable on its own; `slipway` is a library with a
-   thin `main.rs` and a thin `bin/slipway_apply.rs`. Every real I/O (the download, the privileged
+   thin `main.rs`, and `slipway-root` (the three programs that run as root) is a library with three thin
+   `bin/*.rs` files. Every real I/O (the download, the privileged
    helper, the trust anchor, the clock, the login identity) sits behind a trait or a closure with a
    fake in the tests.
 2. **Wire values stay at the edge.** `release.toml`'s text and the bus's strings and integers become

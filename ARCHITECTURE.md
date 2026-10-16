@@ -12,25 +12,43 @@ and can be rolled back. The behaviour follows macOS Software Update.
 | Crate | Purpose | I/O |
 | --- | --- | --- |
 | `slipway-core` | `Release` (parse and validate `release.toml`), `BundlePath`, version `standing`, signature check (`Authenticator`, `PublicKey`), digests, `Audit` (the bundle against the release), the install `Plan`, `plan_exports`, `next_check` (the schedule), `ProgressGate`, `decide_boot` (the health rule) | none |
-| `slipway` | the privileged side (`apply`), downloading (`fetch`), the session service (`service`), the command line (`cli`), the daemon's files (`config`, `state`, `dirs`), and two binaries: `slipway` and `slipway-apply` | files, network, session bus, a child process |
+| `slipway-root` | everything that runs as root: the verified unpack and atomic switch (`apply`), the three programs' entry points (`helper`) and binaries `slipway-apply`, `slipway-rollback`, `slipway-health`, the install root's layout (`layout`), small file operations (`fsutil`), the trust anchor (`keys`), the report the helper prints (`report`) and the two system settings it reads (`settings`) | files, a child process (`restorecon`) |
+| `slipway` | downloading (`fetch`), the session service (`service`), the command line (`cli`), the daemon's files (`config`, `state`, `dirs`), the `pkexec` seam (`elevate`), and one binary: `slipway` | files, network, session bus, a child process |
 
-`slipway-core` reaches no network, bus, runtime or archive crate (`scripts/check-boundary.sh`). It
-reads no clock, environment or file: the caller passes bytes, times and what it saw on disk.
+`slipway-core` reaches no network, bus, runtime or archive crate. `slipway-root` may read archives (`tar`,
+`zstd`) but reaches no network client, TLS, bus or async runtime (`ureq`, `rustls`, `zbus`, `tokio`):
+the programs that run with administrator rights link only `slipway-core`, `thiserror`, `semver`, `toml`,
+`rustix`, `tar` and `zstd` (and what those bring). `scripts/check-boundary.sh` checks both edges. `slipway`
+depends on `slipway-root` (for `Layout`, the file operations, the key loader, the report and the helper's
+exit codes), never the other way. `slipway-core` reads no clock, environment or file: the caller passes
+bytes, times and what it saw on disk.
 
 ## 2. Layout
 
 ```
 crates/slipway-core/src/{lib, version, digest, sign, path, audit, exports, system, health, schedule, progress}.rs
                         release/{mod, error, file, export, system}.rs      plan/{mod, prune}.rs
-crates/slipway/src/{lib, main, config, dirs, state, layout, fsutil, keys, clock, elevate, problem, report, health, helper, login, bootstrap}.rs
-                   bin/{slipway_apply, slipway_health}.rs
-                   apply/{mod, error, staged, unpack, step, install, exports, system, relabel, lock, open, harden, private, synced, guard}.rs
+crates/slipway-root/src/{lib, settings, layout, fsutil, keys, report, helper}.rs
+                        bin/{slipway_apply, slipway_rollback, slipway_health}.rs
+                        apply/{mod, error, staged, unpack, step, install, exports, system, relabel, lock, open, harden, private, synced, guard}.rs
+crates/slipway/src/{lib, main, config, dirs, state, clock, elevate, problem, report, health, login, bootstrap}.rs
                    fetch/{mod, feed, stage, cache, ureq_fetch}.rs
                    service/{mod, context, engine, object, notify, run, status}.rs
                    cli/{mod, args, client, wait, confirm, recover}.rs
 dist/   slipway.service  org.quire.slipway.policy  org.quire.Updates1.service
 scripts/install.sh  scripts/check-boundary.sh
+.github/workflows/ci.yml  deny.toml
 ```
+
+`slipway` re-exports `layout`, `fsutil` and `keys` from `slipway-root`, and `report` adds the logging of a
+report to the type `slipway-root` defines. The three binaries are built with
+`cargo build --release --locked -p slipway-root`; the user program with `-p slipway`.
+
+Install: `scripts/install.sh` only places files. It makes folders with `install -d -m755` and files with
+`install -m MODE` (beside the target, then renamed over it), sets `umask 022` for itself, and refuses to run
+cargo as root: the build is a step of its own, as the person, and the root step takes `--bin-dir` (or
+`--no-build`). `.github/workflows/ci.yml` runs format, clippy, the boundary check, the tests and
+`cargo deny check licenses` and `advisories` (also weekly).
 
 ## 3. The release format (frozen with the CI lane)
 
@@ -122,12 +140,14 @@ slipway recover / confirm  --------------> slipway-health recover|confirmed  org
 
 The three programs are separate files because polkit matches an action to the program's path: the installing
 program cannot go back (a downgrade) at all, and the one that can asks for the administrator's password
-(`auth_admin_keep`). Installing a newer release signed with the project's key stays passwordless. The health
+(`auth_admin_keep`). Installing a newer release signed with the project's key stays passwordless. They are also
+the only programs that run as root, and are built from their own crate (`slipway-root`) so that what runs with
+those rights links nothing it does not need: no network client, bus or async runtime. The health
 program is described in section 7.
 
 Settings come from two files. The system file `/etc/slipway/config.toml` (written once by
 `scripts/install.sh`, never overwritten by it) holds `root` and `pubkey_path` and may hold any other
-setting; `slipway-apply` reads only it, and the daemon and the command line read it first, so they
+setting; `slipway-apply` reads only it (and only its `root` and `pubkey_path`, `slipway_root::settings`), and the daemon and the command line read it first, so they
 cannot disagree about the root or the key. The person's own `$XDG_CONFIG_HOME/slipway/config.toml`
 may only set `settings_command` and `name` (what the notification's button runs and what the software
 is called); every other key in it is ignored.
@@ -165,7 +185,7 @@ checks the signature of `release.toml` and then the bundle's size and digest, an
 Its root and key come from `/etc/slipway/config.toml`, never from the caller. Exit codes: 0 done,
 1 failed, 2 usage, 3 refused (not newer / nothing to go back to), 4 did not verify, 5 busy, 6 no key.
 
-On success the helper prints a report on its standard output (`slipway::report::Report`): `current <version>`,
+On success the helper prints a report on its standard output (`slipway_root::report::Report`): `current <version>`,
 then one `left-alone <path>` per link or system file it left alone because something else is in the way, and one
 `warning <text>` per thing that did not work but did not stop the update (the same lines also go to its error
 output for a person running it by hand). The update service parses it, logs each line, and tells the person once

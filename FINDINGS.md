@@ -225,12 +225,57 @@ Production-audit lane pa-slip (2026-10-16) was also written without a compiler. 
   `Rollback` (copied from sill's picker object), `DBusProxy::get_connection_credentials(..).process_id()`.
 - `fetch/ureq_fetch.rs`: `RequestBuilder::header("Range", String)`, `response.status().as_u16()`,
   `timeout_recv_response` / `timeout_recv_body` on the config builder (ureq 3.4.2).
-- `apply/step.rs` `Switch` / `Links` rewind, and the `Result<Result<..>, JoinError>` handling in
+- `slipway-root` `apply/step.rs` `Switch` / `Links` rewind, and the `Result<Result<..>, JoinError>` handling in
   `service/engine.rs` `install`.
-- `tests/it/apply_hardening.rs` changes the process-wide umask for a moment (to 0 and 077) and puts it
+- `slipway-root/tests/it/apply_hardening.rs` changes the process-wide umask for a moment (to 0 and 077) and puts it
   back to 022; a concurrent test would at worst see a different umask, and none asserts a mode that the code
   does not set explicitly.
 - The polkit file (`dist/org.quire.slipway.policy`) now holds three actions; `pkexec` finds the one for a
   program by the `exec.path` annotation, so the three programs must be installed at the paths it names.
 - Not covered by any test (needs a bus or a real polkit): the caller check on `Rollback()` end to end, and the
   password prompt. The pure parts (`leaf_of`, `is_allowed`) are table tests.
+
+## Production-audit lane pa-slip2 (2026-10-16)
+
+Written without a compiler (only `cargo fmt -p`, and the shell parts of `scripts/install.sh` run under a temporary
+`--destdir`, also with a stand-in `id` printing 0 to see the root refusal). Done:
+
+- **The root programs are their own crate.** `crates/slipway-root` holds `apply/`, `helper.rs`, `layout.rs`,
+  `fsutil.rs`, `keys.rs`, `report.rs` and the three `bin/` files; binary names and installed paths are unchanged.
+  Direct dependencies: `slipway-core`, `thiserror`, `semver`, `toml`, `rustix`, `tar`, `zstd` (no `sha2`: the
+  digests come through `slipway_core::Hasher`). `serde`, `tracing` and everything heavy are gone from it.
+  `scripts/check-boundary.sh` fails if it reaches `ureq`, `rustls`, `zbus` or `tokio`.
+- **Settings.** The privileged programs no longer deserialize the service's whole `Config`: `slipway_root::settings::
+  RootSettings` reads `root` and `pubkey_path` from `/etc/slipway/config.toml` (any other key is ignored), and the
+  service's `Config` takes its defaults and the file path from there. A `root` or `pubkey_path` that is not a string is
+  now refused with a plain sentence.
+- **`scripts/install.sh`.** `install -d -m755` / `install -m MODE` (beside the target, then renamed over), its own
+  `umask 022`, no cargo when run as root (`--bin-dir` or `--no-build` is the root step), the build is
+  `cargo build --release --locked -p slipway-root` as the person.
+- **CI.** The repository had no workflow; `.github/workflows/ci.yml` runs format, clippy, boundaries, tests and
+  `cargo deny check licenses` and `advisories` (weekly too). `deny.toml` gains `[advisories]`.
+- **Tests moved with the code:** `apply_*`, `exports_applied`, `system_applied` and the command-line table now live in
+  `slipway-root/tests/it`, with new tables for `RootSettings`; the keys, file-operation and installed-releases tests
+  moved from `slipway`'s `small.rs`.
+
+Deferred or to check:
+
+- **Desktop repository (not touched here):** its release workflow and `release/build.sh` build the three programs with
+  `-p slipway` and copy `slipway-apply`, `slipway-rollback`, `slipway-health` from slipway's target directory; they now
+  come from `-p slipway-root` (the user program `slipway` stays `-p slipway`). Its README "First install" command
+  `cargo build ... -p slipway --bin slipway-apply --bin slipway-rollback --bin slipway-health` becomes
+  `cargo build --release --locked -p slipway-root`. `release/check-system-list.sh` reads
+  `crates/slipway-core/src/release/system.rs`; `ALLOWED_SYSTEM_FILES` did not move.
+- **Test support is duplicated.** `tests/it/support.rs` (the bundle builder and `Sandbox`) exists in both
+  `slipway` and `slipway-root`, trimmed to what each uses, because both crates' tests install a bundle. Closes when a
+  shared dev-only crate (or `slipway-root` behind a `testing` feature) is worth its weight.
+- **`cargo deny check advisories` was not run.** If the lock holds an unmaintained or yanked crate, the first CI run
+  names it; add an `ignore` entry with a reason, or move the dependency.
+- **`slipway-root` still has `rustix` and `toml`** as direct dependencies: `rustix` for the umask, the limits and the
+  free-space check (no `unsafe` allowed), `toml` for the health record. Both are small and were already in the lock.
+- **`Cargo.lock` was edited by hand** (new `slipway-root` package; `slipway` loses `rustix`, gains `slipway-root`).
+  Refresh it with `cargo metadata` to confirm.
+- Not verified by reading alone: `toml::from_str::<toml::Table>` and `toml::Value::String` in toml 0.9 (`settings.rs`),
+  that no test in `slipway` still uses an item trimmed from its `support.rs` (`pack_special`, `build_around`, `read`,
+  `link`, `previous`, `releases`), and `install -m` placing the file with exactly the mode asked on GNU and busybox
+  `install` (the script then compares modes with `stat`, as before).

@@ -12,12 +12,16 @@ Keeps a desktop installed from signed, prebuilt release bundles up to date.
   offered again until a newer one is published.
 - `slipway` (user): the daily check, download and verify, the session service and the command line.
   `slipway-apply` (privileged, started through polkit): re-verifies and switches; it trusts nothing the
-  user side hands it except a path.
+  user side hands it except a path. It, `slipway-rollback` and `slipway-health` are built from the small
+  crate `slipway-root`, which does not link the network client, the bus or the async runtime.
 
 Install the system pieces (helper, polkit action, user unit, bus activation file and the system
-settings `/etc/slipway/config.toml` holding the root and the key path) with
-`scripts/install.sh --root /opt/quire --pubkey release.pub`; `--help` lists the options, and an
-existing settings file is never overwritten. Your own `~/.config/slipway/config.toml` may only set
+settings `/etc/slipway/config.toml` holding the root and the key path) in two steps: build the three
+privileged programs as yourself with `cargo build --release --locked -p slipway-root`, then install them as
+root with
+`sudo sh -c 'umask 022 && scripts/install.sh --bin-dir target/release --root /opt/quire --pubkey release.pub'`.
+The script never builds as root. `--help` lists the options, and an existing settings file is never
+overwritten. Your own `~/.config/slipway/config.toml` may only set
 `settings_command` and `name`.
 
 See ARCHITECTURE.md.
