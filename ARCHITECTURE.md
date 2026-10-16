@@ -48,7 +48,7 @@ validates all of it: simple paths only (no absolute, `..`, empty or backslash pa
 `.slipway/`), unique files with none inside another, modes that are plain permission bits readable
 by the owner and not writable by anyone else, no setuid; export links only under the eleven allowed
 directories (`ALLOWED_LINK_DIRS`, each named, no wildcards), unique, each pointing at a file the bundle lists
-(not a folder); system files only directly in one of the eight `ALLOWED_SYSTEM_DIRS`, unique, each with
+(not a folder); system files only at a path `ALLOWED_SYSTEM_FILES` names (a folder and an exact name or a name ending), unique, each with
 its contents at `system<path>` in the bundle, and nothing else under `system/`. Limits: `release.toml`
 24 MiB, 100000 files, notes 16 KiB, bundle 8 GiB, 16 GiB unpacked. Folders in the bundle are made
 `0755` whatever the helper's umask. `release/release.py` in the desktop repository packs to exactly
@@ -91,13 +91,20 @@ directory.
 System files: some things work only as a real root-owned file in a system folder (a udev rule, a polkit
 rule, a login service, the keyboard daemon's unit). The bundle carries them under `system/<absolute
 path>`, `release.toml` lists each destination in `[[system]]`, and `SyncSystem` copies the verified file
-from the new release's tree (atomic rename, the listed mode). The destination must be directly in one of
-`ALLOWED_SYSTEM_DIRS` (`/etc/udev/rules.d`, `/etc/modules-load.d`, `/etc/modprobe.d`, `/usr/lib/systemd/system`,
-`/etc/pam.d`, `/etc/polkit-1/rules.d`, `/etc/porter`, `/etc/quire`, `/etc/xdg/quire`); anything else makes the whole release
-refused. A file is overwritten or removed only when it still holds exactly what an earlier release placed
+from the new release's tree (atomic rename, the listed mode). The destination must be a path `ALLOWED_SYSTEM_FILES` names:
+a folder and either one exact name or any plain name with a given ending. Today that is `/etc/pam.d/sill`,
+`/etc/udev/rules.d/{60-sill-ddc,70-keycap,70-palmrest}.rules`, `/etc/modules-load.d/{sill-ddc,keycap}.conf`,
+`/etc/modprobe.d/99-palmrest.conf`, `/usr/lib/systemd/system/keycap.service`,
+`/etc/polkit-1/rules.d/keycap.polkit.rules`, `/etc/porter/{callers,inferd-callers}.toml`,
+`/etc/quire/*-callers.toml` and `/etc/xdg/quire/*.toml`; anything else makes the whole release refused. The helper is
+installed by hand and not by a release, so a new system file needs a new helper (this is the price of the list).
+A file is overwritten or removed only when it still holds exactly what an earlier release placed
 (`slipway-core::plan_system`, by digest); a person's own file, an edited one, or a link is left alone and
-reported like a conflicting export. A signed release can therefore put a file in these folders as root,
-which is as strong as the signing key: the folder list is the whole policy and lives in one constant.
+reported like a conflicting export. So is a name that is empty in `/etc` but that the distribution ships under
+the same name in its own folder (`/usr/lib/pam.d`, `/usr/lib/udev/rules.d`, `/usr/lib/modules-load.d`,
+`/usr/lib/modprobe.d`, `/usr/share/polkit-1/rules.d`: Fedora and Arch keep them there; `vendor_copies`): placing ours
+would hide the vendor's. The desktop's `pack` step must mirror the same list and fail when `system/` holds a path
+it does not name.
 
 SELinux: after a release is published and before it becomes current, and after system files are
 placed, the helper runs `restorecon -RF <root>` and `restorecon -F <files>` (`apply/relabel.rs`), only when

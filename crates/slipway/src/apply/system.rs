@@ -3,8 +3,8 @@
 //! Each file is read from the release's own tree through a handle this code opens, hashed against the
 //! digest the signed description lists, and only then written; what is placed is exactly what was
 //! signed, whatever happened to the tree since it was unpacked. A file is replaced or removed only
-//! when it still holds what an earlier release placed; anything else at a destination is left alone and
-//! reported.
+//! when it still holds what an earlier release placed; anything else at a destination, including a file
+//! of the distribution's that the new one would hide, is left alone and reported.
 
 use super::error::ApplyError;
 use super::exports::recorded;
@@ -16,6 +16,7 @@ use crate::layout::Layout;
 use semver::Version;
 use slipway_core::{
     Authenticator, Placement, Sha256Hex, SystemAction, SystemFound, placements, plan_system,
+    vendor_copies,
 };
 use std::collections::BTreeMap;
 use std::fs;
@@ -33,7 +34,18 @@ fn placed(
     placements(&recorded(layout, auth, version)?).map_err(|e| ApplyError::Unpack(e.to_string()))
 }
 
-/// What is at `path`.
+fn exists(layout: &Layout, path: &str) -> io::Result<bool> {
+    match fs::symlink_metadata(layout.export_path(path)) {
+        Ok(_) => Ok(true),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
+/// What is at `path`. A destination that is empty but would hide a file the distribution ships under
+/// the same name counts as taken: on Fedora and Arch the vendor's PAM, udev and polkit files live in
+/// `/usr/lib`, so `/etc/...` looks free when it is not, and placing ours would replace the vendor's
+/// file without anyone having asked. A file is only ever replaced when an earlier release placed it.
 fn observe(layout: &Layout, path: &str) -> io::Result<SystemFound> {
     let at = layout.export_path(path);
     match fs::symlink_metadata(&at) {
@@ -41,7 +53,14 @@ fn observe(layout: &Layout, path: &str) -> io::Result<SystemFound> {
             Ok(SystemFound::File(Sha256Hex::of(&fs::read(&at)?)))
         }
         Ok(_) => Ok(SystemFound::Foreign),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(SystemFound::Missing),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            for vendor in vendor_copies(path) {
+                if exists(layout, &vendor)? {
+                    return Ok(SystemFound::Foreign);
+                }
+            }
+            Ok(SystemFound::Missing)
+        }
         Err(e) => Err(e),
     }
 }

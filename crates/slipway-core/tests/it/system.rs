@@ -1,6 +1,8 @@
 use crate::support::{Doc, f};
+use slipway_core::release::{ALLOWED_SYSTEM_FILES, NameRule, is_allowed_system_path};
 use slipway_core::{
-    Placement, Release, ReleaseError, Sha256Hex, SystemAction, SystemFound, placements, plan_system,
+    Placement, Release, ReleaseError, Sha256Hex, SystemAction, SystemFound, placements,
+    plan_system, vendor_copies,
 };
 use std::collections::BTreeMap;
 
@@ -15,34 +17,47 @@ fn doc_placing(dest: &str) -> Doc {
 }
 
 #[test]
-fn a_system_file_is_accepted_only_directly_in_an_allowed_folder() {
+fn a_system_file_is_accepted_only_when_a_rule_names_it() {
     // (destination, accepted)
-    let table: [(&str, bool); 30] = [
+    let table: [(&str, bool); 41] = [
+        // The files the desktop places today.
+        ("/etc/pam.d/sill", true),
+        ("/etc/udev/rules.d/60-sill-ddc.rules", true),
         ("/etc/udev/rules.d/70-keycap.rules", true),
+        ("/etc/udev/rules.d/70-palmrest.rules", true),
+        ("/etc/modules-load.d/sill-ddc.conf", true),
         ("/etc/modules-load.d/keycap.conf", true),
         ("/etc/modprobe.d/99-palmrest.conf", true),
         ("/usr/lib/systemd/system/keycap.service", true),
-        ("/etc/pam.d/sill", true),
-        ("/etc/polkit-1/rules.d/49-keycap.rules", true),
+        ("/etc/polkit-1/rules.d/keycap.polkit.rules", true),
         ("/etc/porter/callers.toml", true),
-        ("/etc/quire/policy.toml", true),
-        ("/etc/xdg/quire/intentd.toml", true),
-        ("/etc/udev/rules.d/a@b+c_d-e.rules", true),
+        ("/etc/porter/inferd-callers.toml", true),
+        ("/etc/quire/intentd-callers.toml", true),
+        ("/etc/quire/memory-callers.toml", true),
+        ("/etc/xdg/quire/docket.settings.toml", true),
+        // A folder that is listed but a name nobody named: the point of a per-file list.
+        ("/etc/pam.d/sudo", false),
+        ("/etc/pam.d/system-auth", false),
+        ("/etc/polkit-1/rules.d/00-all.rules", false),
+        ("/etc/polkit-1/rules.d/49-keycap.rules", false),
+        ("/etc/udev/rules.d/99-evil.rules", false),
+        ("/etc/modules-load.d/evil.conf", false),
+        ("/etc/modprobe.d/blacklist.conf", false),
+        ("/usr/lib/systemd/system/evil.service", false),
+        ("/etc/porter/other.toml", false),
+        ("/etc/quire/policy.toml", false),
+        ("/etc/quire/-callers.toml", false),
+        ("/etc/xdg/quire/evil.sh", false),
         // Not a listed folder.
         ("/etc/passwd", false),
-        ("/etc/shadow", false),
         ("/etc/sudoers.d/quire", false),
         ("/etc/systemd/system/keycap.service", false),
         ("/usr/lib/udev/rules.d/70-keycap.rules", false),
         ("/usr/bin/keycap", false),
-        ("/boot/vmlinuz", false),
-        ("/root/.ssh/authorized_keys", false),
         // Beside or below a listed folder.
-        ("/etc/udev/rules.d2/x.rules", false),
+        ("/etc/udev/rules.d2/70-keycap.rules", false),
         ("/etc/pam.d/sub/sill", false),
-        ("/etc/quire2/x", false),
         ("/etc/xdg/quire/sub/x.toml", false),
-        ("/etc/xdg/other.toml", false),
         // The folder itself, climbing, doubled slashes, hidden names, odd characters.
         ("/etc/pam.d", false),
         ("/etc/pam.d/", false),
@@ -53,6 +68,7 @@ fn a_system_file_is_accepted_only_directly_in_an_allowed_folder() {
         ("etc/pam.d/sill", false),
     ];
     for (dest, accepted) in table {
+        assert_eq!(is_allowed_system_path(dest), accepted, "{dest}");
         let parsed = Release::parse(doc_placing(dest).render().as_bytes());
         match (accepted, parsed) {
             (true, Ok(release)) => assert_eq!(release.system.len(), 1, "{dest}"),
@@ -73,17 +89,56 @@ fn a_system_file_is_accepted_only_directly_in_an_allowed_folder() {
 }
 
 #[test]
-fn the_allowed_system_folders_are_listed_by_name() {
-    let dirs = slipway_core::release::ALLOWED_SYSTEM_DIRS;
-    for dir in dirs {
+fn the_allowed_system_files_are_listed_by_name() {
+    for rule in ALLOWED_SYSTEM_FILES {
         assert!(
-            dir.starts_with("/etc/") || dir.starts_with("/usr/lib/"),
-            "{dir}"
+            rule.dir.starts_with("/etc/") || rule.dir.starts_with("/usr/lib/"),
+            "{}",
+            rule.dir
         );
-        assert!(!dir.ends_with('/') && !dir.contains('*'), "{dir}");
+        assert!(
+            !rule.dir.ends_with('/') && !rule.dir.contains('*'),
+            "{}",
+            rule.dir
+        );
+        let text = match rule.name {
+            NameRule::Exact(name) | NameRule::Ending(name) => name,
+        };
+        assert!(!text.contains('/') && !text.contains('*'), "{text}");
     }
-    let unique: std::collections::BTreeSet<_> = dirs.iter().collect();
-    assert_eq!(unique.len(), dirs.len());
+    let unique: std::collections::BTreeSet<_> = ALLOWED_SYSTEM_FILES
+        .iter()
+        .map(|r| (r.dir, format!("{:?}", r.name)))
+        .collect();
+    assert_eq!(unique.len(), ALLOWED_SYSTEM_FILES.len());
+}
+
+#[test]
+fn a_vendor_copy_is_found_where_the_distribution_keeps_it() {
+    let table: [(&str, &[&str]); 7] = [
+        ("/etc/pam.d/sill", &["/usr/lib/pam.d/sill"]),
+        (
+            "/etc/udev/rules.d/70-keycap.rules",
+            &["/usr/lib/udev/rules.d/70-keycap.rules"],
+        ),
+        (
+            "/etc/modules-load.d/keycap.conf",
+            &["/usr/lib/modules-load.d/keycap.conf"],
+        ),
+        (
+            "/etc/modprobe.d/99-palmrest.conf",
+            &["/usr/lib/modprobe.d/99-palmrest.conf"],
+        ),
+        (
+            "/etc/polkit-1/rules.d/keycap.polkit.rules",
+            &["/usr/share/polkit-1/rules.d/keycap.polkit.rules"],
+        ),
+        ("/usr/lib/systemd/system/keycap.service", &[]),
+        ("/etc/quire/intentd-callers.toml", &[]),
+    ];
+    for (path, want) in table {
+        assert_eq!(vendor_copies(path), want, "{path}");
+    }
 }
 
 type Mutate = fn(&mut Doc);

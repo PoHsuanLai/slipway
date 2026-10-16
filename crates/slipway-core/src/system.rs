@@ -58,6 +58,30 @@ pub enum SystemAction {
     },
 }
 
+/// Where a distribution keeps its own copy of a file that would be placed in the administrator's
+/// folder. A file in `/etc/pam.d` hides the one in `/usr/lib/pam.d`, so placing a name the vendor
+/// already ships would silently replace the vendor's file. Fedora and Arch keep their PAM, udev,
+/// module and polkit files there, so on those systems the `/etc` path looks free when it is not.
+const VENDOR_FOLDERS: [(&str, &str); 5] = [
+    ("/etc/pam.d/", "/usr/lib/pam.d/"),
+    ("/etc/udev/rules.d/", "/usr/lib/udev/rules.d/"),
+    ("/etc/modules-load.d/", "/usr/lib/modules-load.d/"),
+    ("/etc/modprobe.d/", "/usr/lib/modprobe.d/"),
+    ("/etc/polkit-1/rules.d/", "/usr/share/polkit-1/rules.d/"),
+];
+
+/// The vendor files a file placed at `path` would hide: the same name in the distribution's own
+/// folder. Empty for a path that has no vendor folder (our own unit folder, the desktop's tables).
+pub fn vendor_copies(path: &str) -> Vec<String> {
+    VENDOR_FOLDERS
+        .iter()
+        .filter_map(|(admin, vendor)| {
+            path.strip_prefix(admin)
+                .map(|name| format!("{vendor}{name}"))
+        })
+        .collect()
+}
+
 /// The system files of `release`, each with its digest and mode taken from the listed bundle file.
 pub fn placements(release: &Release) -> Result<Vec<Placement>, ReleaseError> {
     release

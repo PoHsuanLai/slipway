@@ -100,11 +100,12 @@ Departures from the plan, standing facts and open items. An entry names the cond
    units and files inside the bundle name `/opt/quire/current/...` (the pipeline hard-codes `PREFIX`), so a
    different root only works for a bundle built for it.
 
-5. **Does the release write `/etc/pam.d` at all?** The system step lists `/etc/pam.d`, `/usr/lib/systemd/system`,
-   `/etc/udev/rules.d`, `/etc/modprobe.d` and `/etc/polkit-1/rules.d`, each of which gives whoever holds the signing key root
-   (a PAM stack can accept any password, a rule or unit can run a command as root). The signing key already
-   decides what runs in the session; this widens it to the whole computer. If that is too much, delete the
-   entry from `ALLOWED_SYSTEM_DIRS` and the desktop's PAM service stays an install-time step.
+5. **Closed (ROOT-07, 2026-10-16): the system files are named one by one.** The folder list is gone;
+   `ALLOWED_SYSTEM_FILES` lists the exact files (see ARCHITECTURE s.4). A compromised build step that adds
+   `system/etc/polkit-1/rules.d/00-all.rules` now makes the release unusable instead of giving root. Left to the
+   desktop: `pack` should refuse a `system/` tree that differs from the same list (exact diff in the lane report).
+   Whoever adds a system file edits the list and installs a new helper by hand (decision 1 of the desktop's
+   FINDINGS: a release never replaces the helper).
 
 ## Release pipeline
 

@@ -28,5 +28,5 @@ pub use progress::{Emit, ProgressGate};
 pub use release::{BundleRef, Export, FileEntry, Release, ReleaseError, SystemFile};
 pub use schedule::{Attempt, Due, Outcome, UnixSeconds, next_check};
 pub use sign::{Authenticator, PublicKey, SignError};
-pub use system::{Placement, SystemAction, SystemFound, placements, plan_system};
+pub use system::{Placement, SystemAction, SystemFound, placements, plan_system, vendor_copies};
 pub use version::{Offer, Standing, offer, standing};

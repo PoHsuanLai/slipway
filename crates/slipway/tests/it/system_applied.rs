@@ -131,14 +131,52 @@ fn a_rollback_puts_the_earlier_system_files_back() {
 }
 
 #[test]
-fn a_release_listing_a_system_file_outside_the_allowed_folders_is_refused_whole() {
-    let sandbox = Sandbox::new();
-    let mut recipe = Recipe::new("0.1.0");
-    recipe.listed.push(("system/etc/shadow", "root::0:0:::::"));
-    recipe.system.push("/etc/shadow");
-    sandbox.install(&build(&recipe)).expect_err("refused");
-    assert_eq!(sandbox.current(), None);
-    assert!(!sandbox.link("/etc/shadow").exists());
+fn a_release_listing_a_system_file_no_rule_names_is_refused_whole() {
+    // (destination) a folder the helper knows, a name it does not; and folders it does not know at all.
+    let table = [
+        "/etc/shadow",
+        "/etc/polkit-1/rules.d/00-all.rules",
+        "/etc/pam.d/sudo",
+        "/etc/udev/rules.d/99-evil.rules",
+        "/usr/lib/systemd/system/evil.service",
+    ];
+    for dest in table {
+        let sandbox = Sandbox::new();
+        let in_bundle = format!("system{dest}");
+        let mut recipe = Recipe::new("0.1.0");
+        recipe.listed.push((&in_bundle, "contents"));
+        recipe.system.push(dest);
+        sandbox.install(&build(&recipe)).expect_err(dest);
+        assert_eq!(sandbox.current(), None, "{dest}");
+        assert!(!sandbox.link(dest).exists(), "{dest}");
+    }
+}
+
+#[test]
+fn a_file_the_distribution_ships_in_usr_lib_is_not_replaced_by_a_new_one_in_etc() {
+    // On Fedora and Arch the vendor's PAM and udev files live under /usr/lib, so the /etc name is empty.
+    let table = [
+        (PAM, "/usr/lib/pam.d/sill", PAM_IN_BUNDLE),
+        (
+            UDEV,
+            "/usr/lib/udev/rules.d/70-keycap.rules",
+            UDEV_IN_BUNDLE,
+        ),
+    ];
+    for (dest, vendor, in_bundle) in table {
+        let sandbox = Sandbox::new();
+        let vendor_file = sandbox.link(vendor);
+        std::fs::create_dir_all(vendor_file.parent().expect("parent")).expect("dirs");
+        std::fs::write(&vendor_file, "the vendor's").expect("vendor file");
+        let mut recipe = Recipe::new("0.1.0");
+        recipe.listed.push((in_bundle, "ours"));
+        recipe.system.push(dest);
+
+        let applied = sandbox.install(&build(&recipe)).expect("install");
+        assert_eq!(applied.conflicts, vec![dest.to_owned()], "{dest}");
+        assert!(!sandbox.link(dest).exists(), "{dest}: nothing was placed");
+        assert_eq!(read(&vendor_file), "the vendor's");
+    }
 }
 
 /// Records what it was asked to relabel.
