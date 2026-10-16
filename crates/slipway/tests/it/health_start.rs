@@ -1,5 +1,5 @@
 use crate::support::{Accept, Recipe, Sandbox, build, v};
-use slipway::elevate::{ApplyFailure, Elevate};
+use slipway::elevate::{ApplyFailure, Elevate, Recovery};
 use slipway::health::{Health, on_start};
 use slipway::report::Report;
 use slipway::state::StateStore;
@@ -21,12 +21,23 @@ impl Elevate for Recording<'_> {
 
     fn rollback(&self) -> Result<Report, ApplyFailure> {
         self.calls.lock().expect("lock").push("rollback");
+        Ok(Report::default())
+    }
+
+    /// The health helper, having decided the release has used up its boots: it goes back.
+    fn recover(&self) -> Result<Recovery, ApplyFailure> {
+        self.calls.lock().expect("lock").push("recover");
         slipway::apply::rollback(&self.sandbox.layout, &Accept)
-            .map(|applied| Report::from(&applied))
+            .map(|applied| Recovery::Restored(Report::from(&applied)))
             .map_err(|e| ApplyFailure {
                 code: Some(e.exit_code() as i32),
                 detail: e.to_string(),
             })
+    }
+
+    fn confirmed(&self) -> Result<(), ApplyFailure> {
+        self.calls.lock().expect("lock").push("confirmed");
+        Ok(())
     }
 }
 
@@ -87,7 +98,7 @@ fn a_release_that_never_reached_a_working_session_is_rolled_back_at_the_next_log
     // The next login, still unconfirmed: the first login never made it.
     let second = on_start(&sandbox.layout, &store, &helper, &login("3"));
     assert_eq!(second, Health::Restored);
-    assert_eq!(*helper.calls.lock().expect("lock"), vec!["rollback"]);
+    assert_eq!(*helper.calls.lock().expect("lock"), vec!["recover"]);
     assert_eq!(sandbox.current(), Some(v("0.1.0")));
     assert_eq!(store.load().pending, None);
     assert_eq!(
@@ -159,23 +170,36 @@ fn nothing_pending_means_nothing_happens() {
     assert!(helper.calls.lock().expect("lock").is_empty());
 }
 
+/// A health helper with a fixed answer.
+struct Answers(Result<Recovery, ApplyFailure>);
+
+impl Elevate for Answers {
+    fn install(&self, _: &Path) -> Result<Report, ApplyFailure> {
+        Ok(Report::default())
+    }
+
+    fn rollback(&self) -> Result<Report, ApplyFailure> {
+        Ok(Report::default())
+    }
+
+    fn recover(&self) -> Result<Recovery, ApplyFailure> {
+        self.0.clone()
+    }
+
+    fn confirmed(&self) -> Result<(), ApplyFailure> {
+        Ok(())
+    }
+}
+
 #[test]
 fn a_failed_rollback_is_not_reported_as_restored() {
-    struct Broken;
-    impl Elevate for Broken {
-        fn install(&self, _: &Path) -> Result<Report, ApplyFailure> {
-            Ok(Report::default())
-        }
-        fn rollback(&self) -> Result<Report, ApplyFailure> {
-            Err(ApplyFailure {
-                code: Some(1),
-                detail: "disk".into(),
-            })
-        }
-    }
+    let broken = Answers(Err(ApplyFailure {
+        code: Some(1),
+        detail: "disk".into(),
+    }));
     let (sandbox, store) = two_releases();
     mark(&store, PendingStage::FirstLoginSeen);
-    let health = on_start(&sandbox.layout, &store, &Broken, &login("3"));
+    let health = on_start(&sandbox.layout, &store, &broken, &login("3"));
     assert_eq!(health, Health::Fine);
     assert!(
         store.load().pending.is_some(),
@@ -186,4 +210,20 @@ fn a_failed_rollback_is_not_reported_as_restored() {
         Some(v("0.2.0")),
         "the release is not offered again meanwhile"
     );
+}
+
+#[test]
+fn a_helper_that_finds_the_release_has_boots_left_changes_nothing() {
+    let (sandbox, store) = two_releases();
+    mark(&store, PendingStage::FirstLoginSeen);
+    let before = store.load();
+    let health = on_start(
+        &sandbox.layout,
+        &store,
+        &Answers(Ok(Recovery::Fine)),
+        &login("3"),
+    );
+    assert_eq!(health, Health::Fine);
+    assert_eq!(store.load(), before, "the marker stays, nothing is refused");
+    assert_eq!(sandbox.current(), Some(v("0.2.0")));
 }

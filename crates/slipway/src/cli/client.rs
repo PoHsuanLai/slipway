@@ -50,14 +50,14 @@ pub struct Reply {
 }
 
 impl Reply {
-    fn done(text: impl Into<String>) -> Self {
+    pub(super) fn done(text: impl Into<String>) -> Self {
         Self {
             exit: Exit::Done,
             text: text.into(),
         }
     }
 
-    fn failed(text: impl Into<String>) -> Self {
+    pub(super) fn failed(text: impl Into<String>) -> Self {
         Self {
             exit: Exit::Failed,
             text: text.into(),
@@ -103,7 +103,7 @@ pub async fn dispatch(command: Command, config: &Config) -> Reply {
         Command::Status => status(&proxy, config).await,
         Command::Install => install(&proxy, config).await,
         Command::Rollback => rollback(&proxy).await,
-        Command::Run | Command::Confirm | Command::Help => {
+        Command::Run | Command::Confirm | Command::Recover | Command::Help => {
             return Reply::failed("not a request for the service");
         }
     };

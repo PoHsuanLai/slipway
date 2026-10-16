@@ -93,7 +93,14 @@ Departures from the plan, standing facts and open items. An entry names the cond
     stall allowance (`Patience`, 4) are not tuned on the slow HiNet route; they are the first thing to look at if
     a download there still fails. Not run against the real release site: whether GitHub's download redirect
     keeps the `Range` header is unchecked (if it does not, the first bytes are dropped and it still works, just
-    slower).
+    slower).22. **The session gets two calls, and the rollback it may make needs no password (ROOT-02, ROOT-03).**
+    `slipway confirm` and the new `slipway recover` are the contract (ARCHITECTURE s.7). The automatic
+    rollback is decided by a root-side record counting different boots, not by the person's state file, so
+    it cannot be forced by a program of the person. **Needs the owner's eye:** it is a rollback with no
+    password (the other, on request, will ask for one, decision 23), bounded by "more than two different
+    boots" and "only to the kept previous release". Counting boots makes a crash loop inside one boot
+    invisible to it. If the owner wants a one-boot loop to recover, the desktop's crash guard has to say
+    so on a channel root can trust (there is none today).
 
 ## Open questions
 

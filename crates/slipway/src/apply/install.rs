@@ -2,13 +2,14 @@
 
 use super::error::ApplyError;
 use super::exports::recorded;
+use super::guard::write_record;
 use super::lock::Lock;
 use super::relabel::{NoRelabel, Relabel};
 use super::staged::Staged;
 use super::step::run;
 use crate::layout::Layout;
 use semver::Version;
-use slipway_core::{Authenticator, Step, plan_install, plan_rollback};
+use slipway_core::{Authenticator, GuardRecord, Step, plan_install, plan_rollback};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -24,7 +25,7 @@ pub struct Applied {
     pub warnings: Vec<String>,
 }
 
-fn locked(layout: &Layout) -> Result<Lock, ApplyError> {
+pub(super) fn locked(layout: &Layout) -> Result<Lock, ApplyError> {
     // Folders made now are readable by everyone, whatever umask the helper was started with.
     let made: Vec<_> = [layout.root.clone(), layout.releases_dir()]
         .into_iter()
@@ -39,7 +40,7 @@ fn locked(layout: &Layout) -> Result<Lock, ApplyError> {
     Lock::take(layout)
 }
 
-fn read_installed(layout: &Layout) -> Result<slipway_core::Installed, ApplyError> {
+pub(super) fn read_installed(layout: &Layout) -> Result<slipway_core::Installed, ApplyError> {
     layout
         .installed()
         .map_err(ApplyError::io("looking at what is installed"))
@@ -93,6 +94,17 @@ pub fn rollback_with(
     relabel: &dyn Relabel,
 ) -> Result<Applied, ApplyError> {
     let _lock = locked(layout)?;
+    rollback_locked(layout, auth, relabel)
+}
+
+/// [`rollback_with`] for a caller that already holds the lock. The release returned to is known to have
+/// run well before, so the health record calls it confirmed: a restored release is not rolled back
+/// again for the boots its failed neighbour used up.
+pub(super) fn rollback_locked(
+    layout: &Layout,
+    auth: &dyn Authenticator,
+    relabel: &dyn Relabel,
+) -> Result<Applied, ApplyError> {
     let installed = read_installed(layout)?;
     let steps = plan_rollback(&installed)?;
     for step in &steps {
@@ -104,6 +116,8 @@ pub fn rollback_with(
     let version = read_installed(layout)?
         .current
         .unwrap_or_else(|| Version::new(0, 0, 0));
+    // Best effort: a record that cannot be written only means the next start counts again.
+    let _ = write_record(layout, &GuardRecord::confirmed(version.clone()));
     Ok(Applied {
         version,
         conflicts: done.conflicts,

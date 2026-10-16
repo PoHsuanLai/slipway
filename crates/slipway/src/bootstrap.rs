@@ -3,7 +3,7 @@
 use crate::clock::jitter_seed;
 use crate::config::Config;
 use crate::dirs::Dirs;
-use crate::elevate::Pkexec;
+use crate::elevate::{Helpers, Pkexec};
 use crate::fetch::{Source, UreqFetch};
 use crate::keys::load_key;
 use crate::layout::Layout;
@@ -26,7 +26,7 @@ pub fn production(config: Config, dirs: &Dirs) -> Context {
         source: Source::new(&config.index_url),
         fetch: Arc::new(UreqFetch::new()),
         anchor,
-        elevate: Arc::new(Pkexec::new(config.apply_path.clone())),
+        elevate: Arc::new(Pkexec::new(Helpers::from(&config))),
         login: crate::login::current(),
         seed,
         config,

@@ -2,7 +2,7 @@ use crate::support::{Accept, Recipe, Reject, Sandbox, build, v};
 use semver::Version;
 use slipway::apply::Staged;
 use slipway::config::Config;
-use slipway::elevate::{ApplyFailure, Elevate};
+use slipway::elevate::{ApplyFailure, Elevate, Recovery};
 use slipway::fetch::{
     Download, FeedError, Fetch, FetchError, Patience, Source, StageError, latest, of_version,
     stage, stage_with,
@@ -203,6 +203,14 @@ impl Elevate for NoHelper {
     fn rollback(&self) -> Result<Report, ApplyFailure> {
         Ok(Report::default())
     }
+
+    fn recover(&self) -> Result<Recovery, ApplyFailure> {
+        Ok(Recovery::Fine)
+    }
+
+    fn confirmed(&self) -> Result<(), ApplyFailure> {
+        Ok(())
+    }
 }
 
 fn engine_serving(sandbox: &Sandbox, version: &str, store: &StateStore) -> Arc<Engine> {
@@ -298,6 +306,14 @@ impl Elevate for SwitchesThenFails {
 
     fn rollback(&self) -> Result<Report, ApplyFailure> {
         Ok(Report::default())
+    }
+
+    fn recover(&self) -> Result<Recovery, ApplyFailure> {
+        Ok(Recovery::Fine)
+    }
+
+    fn confirmed(&self) -> Result<(), ApplyFailure> {
+        Ok(())
     }
 }
 

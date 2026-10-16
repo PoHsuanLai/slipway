@@ -49,7 +49,8 @@ fn the_system_file_decides_where_and_what_and_the_person_only_what_is_shown() {
     std::fs::write(
         &user,
         "root = \"/home/p/evil\"\npubkey_path = \"/home/p/evil.pub\"\nindex_url = \"https://evil.test\"\n\
-         apply_path = \"/home/p/evil\"\nsettings_command = \"open-it now\"\n",
+         apply_path = \"/home/p/evil\"\nrollback_path = \"/home/p/evil\"\nhealth_path = \"/home/p/evil\"\n\
+         callers = [\"evil.service\"]\nsettings_command = \"open-it now\"\n",
     )
     .expect("write");
     let config = Config::load_layered(&system, &user).expect("layered");
@@ -57,6 +58,9 @@ fn the_system_file_decides_where_and_what_and_the_person_only_what_is_shown() {
     assert_eq!(config.pubkey_path, PathBuf::from("/srv/q.pub"));
     assert_eq!(config.index_url, Config::default().index_url);
     assert_eq!(config.apply_path, Config::default().apply_path);
+    assert_eq!(config.rollback_path, Config::default().rollback_path);
+    assert_eq!(config.health_path, Config::default().health_path);
+    assert_eq!(config.callers, Config::default().callers);
     assert_eq!(config.settings_command, "open-it now");
     assert_eq!(
         config.name, "Quire Lab",
@@ -224,6 +228,7 @@ fn command_line_table() {
         (vec!["install"], Ok(Command::Install)),
         (vec!["rollback"], Ok(Command::Rollback)),
         (vec!["confirm"], Ok(Command::Confirm)),
+        (vec!["recover"], Ok(Command::Recover)),
         (vec!["--help"], Ok(Command::Help)),
         (vec![], Err(())),
         (vec!["upgrade"], Err(())),

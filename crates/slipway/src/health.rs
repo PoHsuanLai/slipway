@@ -1,6 +1,9 @@
 //! Start-up health: roll back a release that never reached a working session.
+//!
+//! The rollback itself is the health helper's decision (`Elevate::recover`), made from a record only root
+//! can write; this module decides only when to ask.
 
-use crate::elevate::Elevate;
+use crate::elevate::{Elevate, Recovery};
 use crate::layout::Layout;
 use crate::state::StateStore;
 use slipway_core::{Boot, LoginSession, Restore, decide_boot};
@@ -52,8 +55,11 @@ pub fn on_start(
             });
             Health::Fine
         }
-        Boot::RollBack => match elevate.rollback() {
-            Ok(report) => {
+        Boot::RollBack => match elevate.recover() {
+            // The helper counts boots itself and may find this release has some left: nothing is undone,
+            // the marker stays, and the next start asks again.
+            Ok(Recovery::Fine) => Health::Fine,
+            Ok(Recovery::Restored(report)) => {
                 report.log();
                 store.remember(|s| {
                     if let Some(p) = s.pending.take() {

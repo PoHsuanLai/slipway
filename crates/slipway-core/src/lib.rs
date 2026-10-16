@@ -8,6 +8,7 @@
 pub mod audit;
 pub mod digest;
 pub mod exports;
+pub mod guard;
 pub mod health;
 pub mod path;
 pub mod plan;
@@ -21,6 +22,7 @@ pub mod version;
 pub use audit::{Audit, AuditError, EntryKind};
 pub use digest::{Hasher, Sha256Hex};
 pub use exports::{ExportAction, Found, plan_exports};
+pub use guard::{Guard, MAX_UNCONFIRMED_BOOTS, Record as GuardRecord, Trust};
 pub use health::{Boot, LoginSession, Pending, PendingStage, Restore, decide_boot};
 pub use path::{BundlePath, PathError};
 pub use plan::{Installed, PlanError, Step, plan_install, plan_rollback, prune};

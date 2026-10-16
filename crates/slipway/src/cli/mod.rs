@@ -1,15 +1,18 @@
-//! The command line: `slipway check|status|install|rollback|confirm`, talking to the daemon.
+//! The command line: `slipway check|status|install|rollback|confirm|recover`. The first four talk to the
+//! daemon; `confirm` and `recover` work without it.
 //!
 //! Each command prints one plain line on standard output and exits with a documented code.
 
 mod args;
 mod client;
 mod confirm;
+mod recover;
 mod wait;
 
 pub use args::{Command, USAGE, UsageError, parse};
 pub use client::{Reply, dispatch};
-pub use confirm::confirm;
+pub use confirm::{confirm, vouch};
+pub use recover::recover;
 
 /// Exit codes of `slipway`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -25,4 +28,6 @@ pub enum Exit {
     NotRunning = 3,
     /// `install` found nothing newer to install.
     NothingToDo = 4,
+    /// `recover` put the previous version back: the session should start again.
+    Restored = 5,
 }

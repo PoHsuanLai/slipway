@@ -8,10 +8,14 @@ pub const USAGE: &str = "usage: slipway <command>
   status     say what is installed and whether a newer version is waiting
   install    install the newer version
   rollback   go back to the version before
-  confirm    tell the service this session started well (the session runs this)
+  confirm    tell the system this session started well (the session runs this once the shell is
+             up; it can be run again, and works when the update service is not running)
+  recover    run by the session before it starts: if the current version has failed to start in
+             too many restarts, go back to the previous one (works when the update service is
+             not running)
 
 exit codes: 0 done, 1 failed, 2 wrong command, 3 the service is not running,
-            4 nothing newer to install";
+            4 nothing newer to install, 5 the previous version was put back (start again)";
 
 /// What was asked.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,6 +32,8 @@ pub enum Command {
     Rollback,
     /// Confirm this session is healthy.
     Confirm,
+    /// Guard the start of a session: go back if the current version keeps failing to start.
+    Recover,
     /// Print the help text.
     Help,
 }
@@ -53,6 +59,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Command, UsageEr
         "install" => Ok(Command::Install),
         "rollback" => Ok(Command::Rollback),
         "confirm" => Ok(Command::Confirm),
+        "recover" => Ok(Command::Recover),
         "help" | "--help" | "-h" => Ok(Command::Help),
         other => Err(UsageError(format!("unknown command {other:?}"))),
     }

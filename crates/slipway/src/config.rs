@@ -22,6 +22,13 @@ pub const DEFAULT_SETTINGS_COMMAND: &str = "detent --page software-update";
 pub const DEFAULT_NAME: &str = "Quire";
 /// Where the privileged helper lives (the polkit action names this path).
 pub const DEFAULT_APPLY_PATH: &str = "/usr/libexec/slipway-apply";
+/// Where the program that goes back to the previous release lives (it has its own polkit action).
+pub const DEFAULT_ROLLBACK_PATH: &str = "/usr/libexec/slipway-rollback";
+/// Where the program that keeps the root-side health record lives.
+pub const DEFAULT_HEALTH_PATH: &str = "/usr/libexec/slipway-health";
+/// Who may ask the update service to go back to the previous version: the shell's unit, and the
+/// Settings app (by its app id) that shows the Software Update page.
+pub const DEFAULT_CALLERS: [&str; 2] = ["sill.service", "org.quire.Settings"];
 /// The system-wide configuration the privileged helper reads (never the person's own file).
 pub const SYSTEM_CONFIG_PATH: &str = "/etc/slipway/config.toml";
 
@@ -41,6 +48,12 @@ pub struct Config {
     pub name: String,
     /// The privileged helper's path.
     pub apply_path: PathBuf,
+    /// The path of the helper that goes back to the previous version.
+    pub rollback_path: PathBuf,
+    /// The path of the helper that keeps the health record.
+    pub health_path: PathBuf,
+    /// The units and apps the update service lets ask for a rollback.
+    pub callers: Vec<String>,
 }
 
 impl Default for Config {
@@ -52,6 +65,9 @@ impl Default for Config {
             settings_command: DEFAULT_SETTINGS_COMMAND.to_owned(),
             name: DEFAULT_NAME.to_owned(),
             apply_path: PathBuf::from(DEFAULT_APPLY_PATH),
+            rollback_path: PathBuf::from(DEFAULT_ROLLBACK_PATH),
+            health_path: PathBuf::from(DEFAULT_HEALTH_PATH),
+            callers: DEFAULT_CALLERS.iter().map(|c| (*c).to_owned()).collect(),
         }
     }
 }

@@ -8,6 +8,7 @@
 
 mod error;
 mod exports;
+mod guard;
 pub mod harden;
 mod install;
 mod lock;
@@ -21,6 +22,7 @@ mod system;
 mod unpack;
 
 pub use error::{ApplyError, Back, ExitCode};
+pub use guard::{Started, note_confirmed, note_start};
 pub use install::{Applied, install, install_with, rollback, rollback_with};
 pub use relabel::{NoRelabel, Ran, Reach, Relabel, Relabeled, RunProgram, Selinux, SystemRunner};
 pub use staged::{Sealed, Staged, StagedError};

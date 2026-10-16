@@ -75,6 +75,11 @@ impl Layout {
         self.root.join(PRIVATE_DIR)
     }
 
+    /// The root-side health record: which boots a release has been started in without being confirmed.
+    pub fn health_file(&self) -> PathBuf {
+        self.private_dir().join("health.toml")
+    }
+
     /// The lock file. It lives in the private folder: `flock` works on a file opened for reading, so a
     /// lock in a folder others can enter could be held by anybody.
     pub fn lock_file(&self) -> PathBuf {

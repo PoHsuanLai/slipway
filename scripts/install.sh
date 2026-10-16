@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install slipway's system pieces: the privileged helper, its polkit action, the user unit, the bus
+# Install slipway's system pieces: the privileged helpers, their polkit actions, the user unit, the bus
 # activation file, the system settings file and, when given, the release key.
 #
 #   scripts/install.sh [--prefix DIR] [--destdir DIR] [--sysconfdir DIR] [--bin-dir DIR] [--no-build]
@@ -10,15 +10,16 @@
 #             (default none; the environment variable DESTDIR also sets it)
 # --sysconfdir where the system settings go (default /etc when the prefix is /usr, else PREFIX/etc;
 #             the environment variable SYSCONFDIR also sets it)
-# --bin-dir   install the already built slipway-apply found in DIR instead of building it
+# --bin-dir   install the already built slipway-apply and slipway-health found in DIR instead of building them
 # --no-build  install from target/release (or $CARGO_TARGET_DIR/release) without building first
 # --root      the install root the desktop lives under (default /opt/quire); the unit starts
 #             ROOT/current/bin/slipway and the system settings name it
 # --pubkey    the minisign public key releases are signed with, installed as the trust anchor
 #
 # What goes where (DESTDIR, when given, is in front of all of it):
-#   PREFIX/libexec/slipway-apply                       the privileged helper
-#   PREFIX/share/polkit-1/actions/org.quire.slipway.policy   lets the person at the keyboard run it
+#   PREFIX/libexec/slipway-apply                       the privileged helper that installs a release
+#   PREFIX/libexec/slipway-health                      the privileged half of the health check
+#   PREFIX/share/polkit-1/actions/org.quire.slipway.policy   lets the person at the keyboard run them
 #   PREFIX/lib/systemd/user/slipway.service            the daily check, part of the graphical session
 #   PREFIX/share/dbus-1/services/org.quire.Updates1.service
 #                                                      starts that unit when the update service is called
@@ -159,20 +160,24 @@ if [ -n "$bin_dir" ]; then
     built=$bin_dir
 else
     if [ "$build" = yes ]; then
-        (cd "$here" && cargo build --release --locked -p slipway --bin slipway-apply)
+        (cd "$here" && cargo build --release --locked -p slipway --bin slipway-apply --bin slipway-health)
     fi
     built=${CARGO_TARGET_DIR:-$here/target}/release
 fi
-if [ ! -x "$built/slipway-apply" ]; then
-    echo "install.sh: $built/slipway-apply is not there; build first or point --bin-dir at it" >&2
-    exit 1
-fi
+for helper in slipway-apply slipway-health; do
+    if [ ! -x "$built/$helper" ]; then
+        echo "install.sh: $built/$helper is not there; build first or point --bin-dir at it" >&2
+        exit 1
+    fi
+done
 
 # The files in dist/ name /usr/libexec/slipway-apply and /opt/quire; different choices change those paths.
 libexec=$prefix/libexec
 put 755 "$built/slipway-apply" "$libexec/slipway-apply"
+put 755 "$built/slipway-health" "$libexec/slipway-health"
 put 644 "$dist/org.quire.slipway.policy" "$prefix/share/polkit-1/actions/org.quire.slipway.policy" \
-    /usr/libexec/slipway-apply "$libexec/slipway-apply"
+    /usr/libexec/slipway-apply "$libexec/slipway-apply" \
+    /usr/libexec/slipway-health "$libexec/slipway-health"
 put 644 "$dist/slipway.service" "$prefix/lib/systemd/user/slipway.service" /opt/quire "$root"
 put 644 "$dist/org.quire.Updates1.service" "$prefix/share/dbus-1/services/org.quire.Updates1.service" \
     /opt/quire "$root"

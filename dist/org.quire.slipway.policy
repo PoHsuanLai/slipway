@@ -7,6 +7,11 @@
   re-checks the release's signature against the key on this computer and refuses anything that
   does not verify, so what it installs can only be a release signed by the project. Someone who
   is not at the keyboard (a remote or inactive session) is refused.
+
+  Telling the system that a session started well, and asking it to guard the next start, needs no
+  password either: the helper keeps a record only it can write, counts only what only it can see (the
+  boots of the computer), and puts the previous version back only after the current one has failed to
+  start in several different boots. A program of the person cannot make that happen on demand.
 -->
 <policyconfig>
   <vendor>Quire</vendor>
@@ -20,5 +25,15 @@
       <allow_active>yes</allow_active>
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/slipway-apply</annotate>
+  </action>
+  <action id="org.quire.slipway.health">
+    <description>Check that the latest update started well</description>
+    <message>Checking that the latest update started well needs your permission.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/slipway-health</annotate>
   </action>
 </policyconfig>

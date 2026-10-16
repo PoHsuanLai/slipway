@@ -22,6 +22,9 @@ pub enum ExitCode {
     Busy = 5,
     /// This computer has no key to check releases with.
     NoKey = 6,
+    /// The previous release was put back because the current one never started well (the health
+    /// helper's answer to a start; not a failure).
+    Restored = 7,
 }
 
 /// Whether the earlier release was put back after a failure past the switch.

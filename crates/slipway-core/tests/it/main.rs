@@ -3,6 +3,7 @@
 mod audit;
 mod digest_sign;
 mod exports;
+mod guard;
 mod health;
 mod plan;
 mod props;

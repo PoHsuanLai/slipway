@@ -16,6 +16,7 @@ pub mod elevate;
 pub mod fetch;
 pub mod fsutil;
 pub mod health;
+pub mod helper;
 pub mod keys;
 pub mod layout;
 pub mod login;

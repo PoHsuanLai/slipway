@@ -16,6 +16,10 @@ path = "src/main.rs"
 name = "slipway-apply"
 path = "src/bin/slipway_apply.rs"
 
+[[bin]]
+name = "slipway-health"
+path = "src/bin/slipway_health.rs"
+
 [dependencies]
 slipway-core.workspace = true
 thiserror.workspace = true

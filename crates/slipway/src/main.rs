@@ -1,9 +1,10 @@
 //! `slipway`: the update service (`run`) and its command line.
 
 use slipway::bootstrap::production;
-use slipway::cli::{Command, Exit, USAGE, confirm, dispatch, parse};
+use slipway::cli::{Command, Exit, Reply, USAGE, dispatch, parse, recover, vouch};
 use slipway::config::{Config, SYSTEM_CONFIG_PATH};
 use slipway::dirs::Dirs;
+use slipway::elevate::{Helpers, Pkexec};
 use slipway::service::run;
 use slipway::state::StateStore;
 use std::path::Path;
@@ -21,6 +22,9 @@ fn main() -> ExitCode {
         println!("{USAGE}");
         return exit(Exit::Done);
     }
+    if command == Command::Recover {
+        return recover_session();
+    }
     let Some(dirs) = Dirs::resolve(|name| std::env::var_os(name)) else {
         eprintln!("slipway: cannot tell where your settings are (no home folder)");
         return exit(Exit::Failed);
@@ -35,6 +39,7 @@ fn main() -> ExitCode {
     match command {
         Command::Run => run_service(config, &dirs),
         Command::Confirm => confirm_session(&config, &dirs),
+        Command::Recover => recover_session(),
         _ => ask_service(command, &config),
     }
 }
@@ -66,11 +71,32 @@ fn run_service(config: Config, dirs: &Dirs) -> ExitCode {
     }
 }
 
+fn say(reply: &Reply) -> ExitCode {
+    match reply.exit {
+        Exit::Done | Exit::NothingToDo | Exit::Restored => println!("{}", reply.text),
+        _ => eprintln!("{}", reply.text),
+    }
+    exit(reply.exit)
+}
+
+/// The session says the shell is up. Needs no service and no bus: the person's own state, then the
+/// system's health record.
 fn confirm_session(config: &Config, dirs: &Dirs) -> ExitCode {
-    match confirm(&config.root, &StateStore::new(dirs.state_file.clone())) {
-        Ok(_) => exit(Exit::Done),
+    let elevate = Pkexec::new(Helpers::from(config));
+    say(&vouch(
+        &config.root,
+        &StateStore::new(dirs.state_file.clone()),
+        &elevate,
+    ))
+}
+
+/// The session is about to start: go back to the previous version if this one keeps failing to start.
+/// Reads only the system settings, so it runs even where there is no home folder yet.
+fn recover_session() -> ExitCode {
+    match Config::load(Path::new(SYSTEM_CONFIG_PATH)) {
+        Ok(config) => say(&recover(&Pkexec::new(Helpers::from(&config)))),
         Err(e) => {
-            eprintln!("slipway: could not record that this session started well: {e}");
+            eprintln!("slipway: {e}");
             exit(Exit::Failed)
         }
     }
@@ -80,10 +106,5 @@ fn ask_service(command: Command, config: &Config) -> ExitCode {
     let Ok(rt) = runtime() else {
         return exit(Exit::Failed);
     };
-    let reply = rt.block_on(dispatch(command, config));
-    match reply.exit {
-        Exit::Done | Exit::NothingToDo => println!("{}", reply.text),
-        _ => eprintln!("{}", reply.text),
-    }
-    exit(reply.exit)
+    say(&rt.block_on(dispatch(command, config)))
 }

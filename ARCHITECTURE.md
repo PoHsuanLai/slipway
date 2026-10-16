@@ -22,12 +22,12 @@ reads no clock, environment or file: the caller passes bytes, times and what it 
 ```
 crates/slipway-core/src/{lib, version, digest, sign, path, audit, exports, system, health, schedule, progress}.rs
                         release/{mod, error, file, export, system}.rs      plan/{mod, prune}.rs
-crates/slipway/src/{lib, main, config, dirs, state, layout, fsutil, keys, clock, elevate, problem, health, login, bootstrap}.rs
-                   bin/slipway_apply.rs
-                   apply/{mod, error, staged, unpack, step, install, exports, system, relabel, lock}.rs
-                   fetch/{mod, feed, stage, ureq_fetch}.rs
+crates/slipway/src/{lib, main, config, dirs, state, layout, fsutil, keys, clock, elevate, problem, report, health, helper, login, bootstrap}.rs
+                   bin/{slipway_apply, slipway_health}.rs
+                   apply/{mod, error, staged, unpack, step, install, exports, system, relabel, lock, open, harden, private, synced, guard}.rs
+                   fetch/{mod, feed, stage, cache, ureq_fetch}.rs
                    service/{mod, context, engine, object, notify, run, status}.rs
-                   cli/{mod, args, client, wait, confirm}.rs
+                   cli/{mod, args, client, wait, confirm, recover}.rs
 dist/   slipway.service  org.quire.slipway.policy  org.quire.Updates1.service
 scripts/install.sh  scripts/check-boundary.sh
 ```
@@ -203,9 +203,31 @@ service. `dist/org.quire.Updates1.service` lets the session bus start the servic
 
 An install leaves the marker `pending { version, stage = awaiting_first_login, session }`, where
 `session` is the login the install ran in. A login is the boot id (`/proc/sys/kernel/random/boot_id`,
-read through the `login::here` seam) and `XDG_SESSION_ID` when the session manager set one. The
-session runs `slipway confirm` once the shell is up, which records the current version as confirmed.
-At every start `health::on_start` applies `slipway-core::decide_boot` with the login of this start:
+read through the `login::here` seam) and `XDG_SESSION_ID` when the session manager set one.
+
+**What the session must call** (the desktop's `desktop-session`, or the shell). Both work when the update
+service is not running and need no session bus:
+
+- `slipway recover`, once per session start, **before the compositor is started**. It asks the privileged
+  health helper (`slipway-health recover`, a separate polkit action that needs no password) to note that
+  this boot started the current release without anyone having vouched for it, and to put the previous
+  release back when that has happened in more than two *different* boots (`MAX_UNCONFIRMED_BOOTS`). Exit 0:
+  nothing to do; exit 5: the previous version was put back, start the session again; exit 1: could not
+  ask (log it, start anyway).
+- `slipway confirm`, once per login, **after the shell has answered**. It records the current release as
+  good in the person's state (so the service stops watching it) and in the helper's record (so the release is
+  never rolled back for the boots it used while being tried). Running it again changes nothing; with no
+  release installed under the root it does nothing and exits 0; exit 1 means the system could not be told.
+
+Why the helper and not the person's state decides: a rollback without a password must not be something a
+program of the person can ask for. The record is in `<root>/.private/health.toml` (root only), counts only
+the boot id the helper reads itself, and a start in a boot already counted changes nothing; a release that
+was confirmed, or that was just put back, is never rolled back. The cost: a crash loop inside one boot
+(login screen, log in, crash, again) is not counted; it takes restarts of the computer. Going back by hand
+(section 6 `Rollback()`, or `slipway-apply --rollback` run as an administrator) is for that case.
+
+At every start of the service `health::on_start` also applies `slipway-core::decide_boot` with the login of
+this start:
 
 | marker | confirmed | this start | action |
 | --- | --- | --- | --- |
@@ -213,9 +235,10 @@ At every start `health::on_start` applies `slipway-core::decide_boot` with the l
 | for another version, or confirmed | | | clear it |
 | set in this very login (a daemon restart) | no | | keep waiting, change nothing |
 | awaiting first login | no | another login | move to first login seen, recording this login |
-| first login seen | no, previous exists | another login or boot | roll back (`slipway-apply --rollback`), clear, remember the version as refused, notify "The update could not start, so the previous version was restored." |
+| first login seen | no, previous exists | another login or boot | ask the health helper to recover; if it restored, clear the marker, remember the version as refused, notify "The update could not start, so the previous version was restored."; if it declined, change nothing |
 | first login seen | no, nothing to restore | another login or boot | clear it |
 
+A failed recovery marks the version refused and leaves the marker, so the next start asks again.
 "The same login" means the same known boot id and the same session id (neither having one counts
 as equal). An unknown boot id, or a marker written before the login was recorded, never counts as
 the same, which is the earlier rule. With no `XDG_SESSION_ID` at all, a second login on the same boot
