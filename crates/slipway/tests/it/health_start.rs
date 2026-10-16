@@ -1,6 +1,7 @@
 use crate::support::{Accept, Recipe, Sandbox, build, v};
 use slipway::elevate::{ApplyFailure, Elevate};
 use slipway::health::{Health, on_start};
+use slipway::report::Report;
 use slipway::state::StateStore;
 use slipway_core::{LoginSession, Pending, PendingStage};
 use std::path::Path;
@@ -13,15 +14,15 @@ struct Recording<'a> {
 }
 
 impl Elevate for Recording<'_> {
-    fn install(&self, _: &Path) -> Result<(), ApplyFailure> {
+    fn install(&self, _: &Path) -> Result<Report, ApplyFailure> {
         self.calls.lock().expect("lock").push("install");
-        Ok(())
+        Ok(Report::default())
     }
 
-    fn rollback(&self) -> Result<(), ApplyFailure> {
+    fn rollback(&self) -> Result<Report, ApplyFailure> {
         self.calls.lock().expect("lock").push("rollback");
         slipway::apply::rollback(&self.sandbox.layout, &Accept)
-            .map(drop)
+            .map(|applied| Report::from(&applied))
             .map_err(|e| ApplyFailure {
                 code: Some(e.exit_code() as i32),
                 detail: e.to_string(),
@@ -162,10 +163,10 @@ fn nothing_pending_means_nothing_happens() {
 fn a_failed_rollback_is_not_reported_as_restored() {
     struct Broken;
     impl Elevate for Broken {
-        fn install(&self, _: &Path) -> Result<(), ApplyFailure> {
-            Ok(())
+        fn install(&self, _: &Path) -> Result<Report, ApplyFailure> {
+            Ok(Report::default())
         }
-        fn rollback(&self) -> Result<(), ApplyFailure> {
+        fn rollback(&self) -> Result<Report, ApplyFailure> {
             Err(ApplyFailure {
                 code: Some(1),
                 detail: "disk".into(),

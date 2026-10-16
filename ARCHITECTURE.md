@@ -152,6 +152,14 @@ checks the signature of `release.toml` and then the bundle's size and digest, an
 Its root and key come from `/etc/slipway/config.toml`, never from the caller. Exit codes: 0 done,
 1 failed, 2 usage, 3 refused (not newer / nothing to go back to), 4 did not verify, 5 busy, 6 no key.
 
+On success the helper prints a report on its standard output (`slipway::report::Report`): `current <version>`,
+then one `left-alone <path>` per link or system file it left alone because something else is in the way, and one
+`warning <text>` per thing that did not work but did not stop the update (the same lines also go to its error
+output for a person running it by hand). The update service parses it, logs each line, and tells the person once
+("A few things you had set up yourself were left as they are") when something was left alone. The service stops
+waiting for the helper after 30 minutes (`HELPER_PATIENCE`), and kills what it can; a stuck helper no longer
+leaves the state at "installing" for ever.
+
 ## 6. The session service
 
 `slipway run` owns `org.quire.Updates1` at `/org/quire/Updates1` on the session bus.

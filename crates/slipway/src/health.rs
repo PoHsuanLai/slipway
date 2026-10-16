@@ -52,7 +52,8 @@ pub fn on_start(
             Health::Fine
         }
         Boot::RollBack => match elevate.rollback() {
-            Ok(()) => {
+            Ok(report) => {
+                report.log();
                 let _ = store.update(|s| {
                     if let Some(p) = s.pending.take() {
                         s.refuse(p.version);

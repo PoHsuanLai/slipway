@@ -254,6 +254,14 @@ impl Engine {
         self.notify_once(&release.version).await;
     }
 
+    /// Posts a notification with `text`, if the bus is there.
+    async fn tell(&self, text: &str) {
+        let Some(bus) = self.bus.get() else { return };
+        if let Err(e) = notify::post(bus, &self.posted, text).await {
+            tracing::warn!("could not post the notification: {e}");
+        }
+    }
+
     /// One notification per version, ever.
     async fn notify_once(&self, version: &Version) {
         if self.ctx.store.load().notified.as_ref() == Some(version) {
@@ -296,16 +304,20 @@ impl Engine {
         .await;
         self.change(|s| s.phase = Phase::Installing).await;
         let (engine, staged) = (Arc::clone(self), dir.clone());
-        tokio::task::spawn_blocking(move || engine.ctx.elevate.install(&staged))
+        let report = tokio::task::spawn_blocking(move || engine.ctx.elevate.install(&staged))
             .await
             .map_err(|_| Problem::Other)?
             .map_err(|failure| {
                 tracing::warn!("installing failed: {failure}");
                 Problem::from_apply(&failure)
             })?;
+        report.log();
         let pending = Pending::installed(version.clone(), self.ctx.login.clone());
         let _ = self.ctx.store.update(|s| s.pending = Some(pending));
         let _ = remove_tree(&dir);
+        if !report.conflicts.is_empty() {
+            self.tell(notify::LEFT_ALONE_TEXT).await;
+        }
         *lock(&self.offer) = None;
         self.change(|s| {
             s.phase = Phase::Installed;
@@ -370,7 +382,7 @@ impl Engine {
     async fn rollback(self: &Arc<Self>) -> Result<(), Problem> {
         let left = self.installed_version();
         let engine = Arc::clone(self);
-        tokio::task::spawn_blocking(move || engine.ctx.elevate.rollback())
+        let report = tokio::task::spawn_blocking(move || engine.ctx.elevate.rollback())
             .await
             .map_err(|_| Problem::Other)?
             .map_err(|failure| {
@@ -380,6 +392,10 @@ impl Engine {
                     other => other,
                 }
             })?;
+        report.log();
+        if !report.conflicts.is_empty() {
+            self.tell(notify::LEFT_ALONE_TEXT).await;
+        }
         let _ = self.ctx.store.update(|s| {
             s.pending = None;
             if let Some(left) = left {

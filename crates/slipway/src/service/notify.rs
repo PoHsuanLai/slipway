@@ -60,6 +60,10 @@ pub fn available_text(name: &str, version: &semver::Version) -> String {
     format!("{name} {version} is available.")
 }
 
+/// The text when an update left some of the person's own changes in place instead of replacing them.
+pub const LEFT_ALONE_TEXT: &str =
+    "The update is installed. A few things you had set up yourself were left as they are.";
+
 /// The text after an automatic rollback.
 pub const RESTORED_TEXT: &str = "The update could not start, so the previous version was restored.";
 

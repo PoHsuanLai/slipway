@@ -9,6 +9,7 @@ use slipway::apply::{ApplyError, ExitCode as Code, Selinux, install_with, rollba
 use slipway::config::{Config, SYSTEM_CONFIG_PATH};
 use slipway::keys::{KeyError, load_key};
 use slipway::layout::Layout;
+use slipway::report::Report;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -92,7 +93,8 @@ fn main() -> ExitCode {
             for warning in &applied.warnings {
                 eprintln!("slipway-apply: {warning}");
             }
-            println!("version {} is now current", applied.version);
+            // What the update service reads: the version, then every conflict and warning.
+            print!("{}", Report::from(&applied).render());
             finish(Code::Done)
         }
         Err(e) => {

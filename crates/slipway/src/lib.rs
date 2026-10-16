@@ -20,6 +20,7 @@ pub mod keys;
 pub mod layout;
 pub mod login;
 pub mod problem;
+pub mod report;
 pub mod service;
 pub mod state;
 

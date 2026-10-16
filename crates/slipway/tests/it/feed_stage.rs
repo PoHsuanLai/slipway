@@ -6,6 +6,7 @@ use slipway::elevate::{ApplyFailure, Elevate};
 use slipway::fetch::{
     Download, FeedError, Fetch, FetchError, Source, StageError, latest, of_version, stage,
 };
+use slipway::report::Report;
 use slipway::service::{Context, Engine, Job, Phase, Status};
 use slipway::state::StateStore;
 use slipway_core::LoginSession;
@@ -159,12 +160,12 @@ fn a_download_that_is_not_the_bundle_is_thrown_away() {
 struct NoHelper;
 
 impl Elevate for NoHelper {
-    fn install(&self, _: &Path) -> Result<(), ApplyFailure> {
-        Ok(())
+    fn install(&self, _: &Path) -> Result<Report, ApplyFailure> {
+        Ok(Report::default())
     }
 
-    fn rollback(&self) -> Result<(), ApplyFailure> {
-        Ok(())
+    fn rollback(&self) -> Result<Report, ApplyFailure> {
+        Ok(Report::default())
     }
 }
 

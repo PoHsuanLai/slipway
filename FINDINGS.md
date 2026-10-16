@@ -79,6 +79,10 @@ Departures from the plan, standing facts and open items. An entry names the cond
     Deferred: a per-file `size` in `[[file]]` (ROOT-06's other half) changes the frozen release format and
     needs `release.py` and `pack.sh` to follow; with the digest taken on a private copy the stream can no
     longer be swapped for a different one, so the remaining risk is a signed bundle that is itself huge.
+20. **Conflicts and warnings reach the person (ROOT-12).** The helper's report is on its standard output and
+    is parsed by the service (ARCHITECTURE s.5). A conflict is logged and posted once as a notification; a
+    warning (a security label that could not be set) is logged only, because nothing a person can do changes it.
+    `Elevate::install` and `rollback` return the report; the helper run has a 30-minute limit.
 19. **A step after the switch that fails puts the earlier release back (ROOT-11).** See ARCHITECTURE s.4.
 
 ## Open questions
