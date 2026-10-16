@@ -13,6 +13,15 @@
 # --bin-dir   install the already built slipway-apply, slipway-rollback and slipway-health found in DIR
 #             instead of building them
 # --no-build  install from target/release (or $CARGO_TARGET_DIR/release) without building first
+#
+# Building and installing are two steps with two owners. The build runs as the person (it compiles
+# every dependency, and none of that may run as root); the install is the step that needs root, and it
+# only places finished files: with --bin-dir or --no-build it never runs cargo. Asked to build while
+# running as root the script refuses and says what to run instead:
+#
+#   cargo build --release --locked -p slipway-root       (as yourself, in this folder)
+#   sudo sh -c 'umask 022 && scripts/install.sh --bin-dir target/release --pubkey FILE'
+#
 # --root      the install root the desktop lives under (default /opt/quire); the unit starts
 #             ROOT/current/bin/slipway and the system settings name it
 # --pubkey    the minisign public key releases are signed with, installed as the trust anchor
@@ -47,10 +56,15 @@
 # what to run. Nothing is done where SELinux is off or the tools are missing. slipway-apply also runs
 # `restorecon` on every release it places, so later releases need nothing from this script.
 #
+# Every folder is made with `install -d -m755` and every file placed with `install -m MODE`, so a
+# restrictive umask (root's is often 077) changes no mode and there is no moment when a file has the
+# wrong one; the script also sets umask 022 for anything else it creates.
+#
 # The script is standalone and idempotent: run again, it changes nothing that is already as it
 # should be. It writes nothing under a home directory, and only writes under /usr when run, without
 # a destdir, by someone who may. The unit is not enabled (that writes under the home directory).
 set -eu
+umask 022
 
 prefix=${PREFIX:-/usr}
 destdir=${DESTDIR:-}
@@ -123,36 +137,62 @@ mode_of() {
     stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"
 }
 
+# A private folder for the text this script composes before it is placed; removed on the way out.
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+
+# make_dir DIR: DIR and any missing parents, each made with `install -d -m755`. A folder that is already
+# there is left as it is (this never changes the mode of /usr/lib or the like).
+make_dir() {
+    [ -d "$1" ] && return 0
+    make_dir "$(dirname "$1")"
+    install -d -m755 "$1"
+}
+
+# substitute FILE FROM TO: replaces every FROM in FILE by TO, in place.
+substitute() {
+    FROM=$2 TO=$3 awk '
+        BEGIN { from = ENVIRON["FROM"]; to = ENVIRON["TO"]; n = length(from) }
+        {
+            out = ""; line = $0
+            while ((i = index(line, from)) > 0) {
+                out = out substr(line, 1, i - 1) to
+                line = substr(line, i + n)
+            }
+            print out line
+        }' "$1" >"$1.sub"
+    mv -f "$1.sub" "$1"
+}
+
+# place MODE SOURCE TARGET: SOURCE becomes TARGET with mode MODE, written beside it with `install -m` and
+# renamed over it. An existing target with the same content and mode is left alone.
+place() {
+    staged=$3.new.$$
+    install -m "$1" "$2" "$staged"
+    if [ -f "$3" ] && cmp -s "$staged" "$3" && [ "$(mode_of "$3")" = "$(mode_of "$staged")" ]; then
+        rm -f "$staged"
+        return 1
+    fi
+    mv -f "$staged" "$3"
+}
+
 # put MODE SOURCE TARGET [FROM TO]...: write SOURCE to DESTDIR/TARGET with mode MODE, replacing the
-# text FROM by TO on the way for each FROM TO pair given. An existing target with the same content
-# and mode is left alone.
+# text FROM by TO on the way for each FROM TO pair given.
 put() {
     mode=$1
     source=$2
     target=$destdir$3
     shift 3
-    mkdir -p "$(dirname "$target")"
-    staged=$target.new.$$
-    cp "$source" "$staged"
-    while [ $# -ge 2 ]; do
-        FROM=$1 TO=$2 awk '
-            BEGIN { from = ENVIRON["FROM"]; to = ENVIRON["TO"]; n = length(from) }
-            {
-                out = ""; line = $0
-                while ((i = index(line, from)) > 0) {
-                    out = out substr(line, 1, i - 1) to
-                    line = substr(line, i + n)
-                }
-                print out line
-            }' "$staged" >"$staged.sub"
-        mv -f "$staged.sub" "$staged"
-        shift 2
-    done
-    chmod "$mode" "$staged"
-    if [ -f "$target" ] && cmp -s "$staged" "$target" && [ "$(mode_of "$target")" = "$(mode_of "$staged")" ]; then
-        rm -f "$staged"
-    else
-        mv -f "$staged" "$target"
+    make_dir "$(dirname "$target")"
+    if [ $# -ge 2 ]; then
+        cp "$source" "$work/text"
+        while [ $# -ge 2 ]; do
+            substitute "$work/text" "$1" "$2"
+            shift 2
+        done
+        source=$work/text
+    fi
+    if place "$mode" "$source" "$target"; then
         changed=$((changed + 1))
         echo "installed ${target#"$destdir"}"
     fi
@@ -162,7 +202,13 @@ if [ -n "$bin_dir" ]; then
     built=$bin_dir
 else
     if [ "$build" = yes ]; then
-        (cd "$here" && cargo build --release --locked -p slipway --bin slipway-apply --bin slipway-rollback --bin slipway-health)
+        if [ "$(id -u)" = 0 ]; then
+            echo "install.sh: not building as root: compiling the dependencies must not run with administrator rights." >&2
+            echo "install.sh: build as yourself:  cargo build --release --locked -p slipway-root" >&2
+            echo "install.sh: then install:       sudo sh -c 'umask 022 && $0 --bin-dir target/release${pubkey:+ --pubkey $pubkey}'" >&2
+            exit 1
+        fi
+        (cd "$here" && cargo build --release --locked -p slipway-root)
     fi
     built=${CARGO_TARGET_DIR:-$here/target}/release
 fi
@@ -198,16 +244,14 @@ if [ -e "$settings" ]; then
         echo "install.sh: note: it names the root $kept, not $root; edit it if $root is meant" >&2
     fi
 else
-    mkdir -p "$(dirname "$settings")"
-    staged=$settings.new.$$
+    make_dir "$(dirname "$settings")"
     {
         echo "# slipway system settings: read by slipway-apply (as root) and by the update service."
         echo "# The person's own file may only change settings_command and name."
         echo "root = \"$root\""
         echo "pubkey_path = \"$prefix/share/slipway/release.pub\""
-    } >"$staged"
-    chmod 644 "$staged"
-    mv -f "$staged" "$settings"
+    } >"$work/config.toml"
+    place 644 "$work/config.toml" "$settings" || true
     changed=$((changed + 1))
     echo "installed ${settings#"$destdir"}"
 fi
