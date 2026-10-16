@@ -1,0 +1,50 @@
+name: ci
+
+# Linux checks: formatting, lints, licences and advisories of the dependencies, the crate boundaries
+# (scripts/check-boundary.sh: the programs that run as root must not link the network client or the
+# bus) and the tests. The advisories check reads the RustSec database, so it also runs once a week
+# without a push: a new advisory against a locked dependency should not wait for the next change.
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 5 * * 1"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: format
+        run: cargo fmt --all --check
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: crate boundaries
+        run: scripts/check-boundary.sh
+
+  # Licences and advisories of everything in Cargo.lock.
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - name: licences
+        run: cargo deny check licenses
+      - name: advisories
+        run: cargo deny check advisories
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: test
+        run: cargo test --workspace --locked
