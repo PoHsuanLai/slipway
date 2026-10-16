@@ -1,5 +1,7 @@
 //! What the service says about itself: the properties of the bus object.
 
+use crate::problem::Problem;
+
 /// Where the update flow is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Phase {
@@ -64,6 +66,8 @@ pub struct Status {
     pub last_checked: i64,
     /// What went wrong, in plain words, "" when nothing.
     pub problem: String,
+    /// What kind of failure it was, for programs; `None` when nothing went wrong.
+    pub kind: Option<Problem>,
 }
 
 impl Status {
@@ -78,6 +82,7 @@ impl Status {
             progress: 0,
             last_checked,
             problem: String::new(),
+            kind: None,
         }
     }
 }

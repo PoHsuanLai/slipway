@@ -128,4 +128,15 @@ impl Updates {
     fn problem(&self) -> String {
         self.engine.snapshot().problem
     }
+
+    /// What kind of failure it was, a stable word for programs and never shown to a person, empty
+    /// when nothing went wrong. Changes together with `Problem`.
+    #[zbus(property)]
+    fn problem_kind(&self) -> String {
+        self.engine
+            .snapshot()
+            .kind
+            .map(|kind| kind.kind().to_owned())
+            .unwrap_or_default()
+    }
 }

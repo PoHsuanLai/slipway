@@ -1,3 +1,4 @@
+use crate::private_bus::PrivateBus;
 use crate::support::{Accept, Recipe, Reject, Sandbox, build, v};
 use peephole_bus::peephole_core::Table;
 use semver::Version;
@@ -9,7 +10,9 @@ use slipway::fetch::{
 };
 use slipway::problem::Problem;
 use slipway::report::Report;
-use slipway::service::{Context, Engine, Job, Phase, Status, Wanted};
+use slipway::service::{
+    BUS_NAME, Context, Engine, Gate, Job, PATH, Phase, Status, Updates, Wanted, peers_on,
+};
 use slipway::state::StateStore;
 use slipway_core::LoginSession;
 use slipway_root::apply::Staged;
@@ -424,4 +427,55 @@ fn naming_a_version_when_nothing_is_on_offer_installs_nothing() {
     assert_eq!(status.phase, Phase::Failed, "{status:?}");
     assert_eq!(status.problem, Problem::VersionChanged.plain());
     assert_eq!(sandbox.current(), Some(v("0.2.0")));
+}
+
+/// `ProblemKind` as a caller on the bus reads it, never from a cache.
+async fn problem_kind_seen_by(client: &zbus::Connection) -> String {
+    zbus::proxy::Builder::<zbus::Proxy<'_>>::new(client)
+        .destination(BUS_NAME)
+        .and_then(|b| b.path(PATH))
+        .and_then(|b| b.interface("org.quire.Updates1"))
+        .expect("a proxy for the update service")
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()
+        .await
+        .expect("the proxy")
+        .get_property::<String>("ProblemKind")
+        .await
+        .expect("the property")
+}
+
+#[test]
+fn the_kind_of_a_failure_is_on_the_bus_and_clears_with_the_next_attempt() {
+    let sandbox = Sandbox::new();
+    sandbox
+        .install(&build(&Recipe::new("0.1.0")))
+        .expect("install");
+    let store = StateStore::new(sandbox.tmp.path().join("state.toml"));
+    let engine = engine_serving(&sandbox, "0.3.0", &store);
+    block_on(async {
+        let bus = PrivateBus::start();
+        let (server, client) = (bus.connect().await, bus.connect().await);
+        let gate = Gate::new(peers_on(server.clone(), Table::empty()));
+        server
+            .object_server()
+            .at(PATH, Updates::new(Arc::clone(&engine), gate))
+            .await
+            .expect("serve");
+        server.request_name(BUS_NAME).await.expect("the name");
+        engine.connect(server.clone());
+
+        assert_eq!(
+            problem_kind_seen_by(&client).await,
+            "",
+            "nothing has failed"
+        );
+        // The person saw 0.2.0 and the offer is not known yet: the install looks, sees 0.3.0 and stops.
+        let failed = ran(&engine, Job::Install(wanting("0.2.0"))).await;
+        assert_eq!(failed.phase, Phase::Failed, "{failed:?}");
+        assert_eq!(problem_kind_seen_by(&client).await, "version-changed");
+        let checked = checked(&engine).await;
+        assert_eq!(checked.phase, Phase::Available, "{checked:?}");
+        assert_eq!(problem_kind_seen_by(&client).await, "");
+    });
 }

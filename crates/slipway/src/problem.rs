@@ -70,6 +70,27 @@ impl Problem {
         }
     }
 
+    /// The stable slug programs read (`ProblemKind` on the bus). Never shown to a person; it never
+    /// changes once released, so a program can match on it where it must not match on [`Self::plain`].
+    pub fn kind(self) -> &'static str {
+        match self {
+            Self::NoKey => "no-key",
+            Self::KeyUnreadable => "key-unreadable",
+            Self::Offline => "offline",
+            Self::Unverified => "unverified",
+            Self::NotAllowed => "not-allowed",
+            Self::Busy => "busy",
+            Self::NothingToInstall => "nothing-to-install",
+            Self::NothingToRestore => "nothing-to-restore",
+            Self::NotAVersion => "not-a-version",
+            Self::VersionChanged => "version-changed",
+            Self::InstallNotFromHere => "install-not-from-here",
+            Self::RollbackNotFromHere => "rollback-not-from-here",
+            Self::CallerUnknown => "caller-unknown",
+            Self::Other => "other",
+        }
+    }
+
     /// From the exit status of the privileged helper (see `slipway-apply --help`).
     pub fn from_apply(failure: &ApplyFailure) -> Self {
         match failure.code {

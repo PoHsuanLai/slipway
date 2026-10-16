@@ -212,7 +212,12 @@ leaves the state at "installing" for ever.
 
 Properties (all emit `PropertiesChanged`): `State` (idle, checking, available, downloading, ready,
 installing, installed, failed), `Current`, `Available` ("" when none), `Notes`, `Size` (bytes),
-`Progress` (permille), `LastChecked` (unix seconds, 0 never), `Problem` (plain words).
+`Progress` (permille), `LastChecked` (unix seconds, 0 never), `Problem` (plain words), `ProblemKind` (the stable
+slug of the failure, for programs only and never shown: `no-key`, `key-unreadable`, `offline`, `unverified`,
+`not-allowed`, `busy`, `nothing-to-install`, `nothing-to-restore`, `not-a-version`, `version-changed`,
+`install-not-from-here`, `rollback-not-from-here`, `caller-unknown`, `other`; "" when there is no problem; it changes
+with `Problem`, set and cleared together; `Problem::kind` in `problem.rs`; a program that finds a slug it does not
+know treats it as a plain failure).
 Methods: `Check()`, `Install(version: s)`, `Rollback()`. Who is calling is decided by peephole (`service/gate.rs`):
 the bus names the caller's process, peephole holds it by the descriptor the bus daemon gave, reads its image and its
 unit and judges it against the desktop's own table (`/etc/quire/desktop-callers.toml`, root-owned; loaded once at

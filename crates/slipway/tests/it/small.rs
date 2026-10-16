@@ -324,6 +324,31 @@ fn what_a_person_reads_names_no_tool_or_protocol() {
 }
 
 #[test]
+fn every_problem_has_its_own_stable_slug() {
+    let table = [
+        (Problem::NoKey, "no-key"),
+        (Problem::KeyUnreadable, "key-unreadable"),
+        (Problem::Offline, "offline"),
+        (Problem::Unverified, "unverified"),
+        (Problem::NotAllowed, "not-allowed"),
+        (Problem::Busy, "busy"),
+        (Problem::NothingToInstall, "nothing-to-install"),
+        (Problem::NothingToRestore, "nothing-to-restore"),
+        (Problem::NotAVersion, "not-a-version"),
+        (Problem::VersionChanged, "version-changed"),
+        (Problem::InstallNotFromHere, "install-not-from-here"),
+        (Problem::RollbackNotFromHere, "rollback-not-from-here"),
+        (Problem::CallerUnknown, "caller-unknown"),
+        (Problem::Other, "other"),
+    ];
+    let mut seen = std::collections::BTreeSet::new();
+    for (problem, slug) in table {
+        assert_eq!(problem.kind(), slug);
+        assert!(seen.insert(slug), "{slug} is used twice");
+    }
+}
+
+#[test]
 fn only_a_real_version_of_sane_length_can_be_named_for_an_install() {
     let long = format!("1.0.0-{}", "a".repeat(MAX_VERSION_BYTES));
     let table = [

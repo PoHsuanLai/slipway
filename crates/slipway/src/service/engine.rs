@@ -111,6 +111,7 @@ impl Engine {
             let old = status.clone();
             status.phase = first;
             status.problem.clear();
+            status.kind = None;
             status.progress = 0;
             old
         };
@@ -129,6 +130,7 @@ impl Engine {
             self.change(|s| {
                 s.phase = Phase::Failed;
                 s.problem = problem.plain().to_owned();
+                s.kind = Some(problem);
                 s.progress = 0;
             })
             .await;
@@ -177,6 +179,9 @@ impl Engine {
         }
         if old.problem != new.problem {
             let _ = iface.problem_changed(emitter).await;
+        }
+        if old.kind != new.kind {
+            let _ = iface.problem_kind_changed(emitter).await;
         }
     }
 
