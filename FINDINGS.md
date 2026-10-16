@@ -159,7 +159,10 @@ Departures from the plan, standing facts and open items. An entry names the cond
    `system/etc/polkit-1/rules.d/00-all.rules` now makes the release unusable instead of giving root. Left to the
    desktop: `pack` should refuse a `system/` tree that differs from the same list (exact diff in the lane report).
    Whoever adds a system file edits the list and installs a new helper by hand (decision 1 of the desktop's
-   FINDINGS: a release never replaces the helper).
+   FINDINGS: a release never replaces the helper). 2026-10-17: `/usr/lib/keycap/keycap.toml` was added (18 rules)
+   for the desktop's keyboard-daemon defaults; no rule was removed, so a rollback to an older release still places
+   its files. Machines that already have a helper must re-run the installer before a release that lists it, or the
+   helper refuses that release whole.
 
 ## Release pipeline
 

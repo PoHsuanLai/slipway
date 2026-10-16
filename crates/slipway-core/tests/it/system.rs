@@ -19,7 +19,7 @@ fn doc_placing(dest: &str) -> Doc {
 #[test]
 fn a_system_file_is_accepted_only_when_a_rule_names_it() {
     // (destination, accepted)
-    let table: [(&str, bool); 51] = [
+    let table: [(&str, bool); 54] = [
         // The files the desktop places today.
         ("/etc/pam.d/sill", true),
         ("/etc/udev/rules.d/60-sill-ddc.rules", true),
@@ -27,6 +27,7 @@ fn a_system_file_is_accepted_only_when_a_rule_names_it() {
         ("/etc/udev/rules.d/70-palmrest.rules", true),
         ("/etc/modules-load.d/sill-ddc.conf", true),
         ("/etc/modules-load.d/keycap.conf", true),
+        ("/usr/lib/keycap/keycap.toml", true),
         ("/etc/modprobe.d/99-palmrest.conf", true),
         ("/usr/lib/systemd/system/keycap.service", true),
         ("/etc/polkit-1/rules.d/keycap.polkit.rules", true),
@@ -62,6 +63,9 @@ fn a_system_file_is_accepted_only_when_a_rule_names_it() {
         ("/etc/systemd/system/turnstile.socket", false),
         ("/usr/lib/udev/rules.d/70-keycap.rules", false),
         ("/usr/bin/keycap", false),
+        // The administrator's keycap folder is never placed into; only the vendor folder is.
+        ("/etc/keycap/keycap.toml", false),
+        ("/usr/lib/keycap/other.toml", false),
         // Security profiles are never placed by an update (owner, 2026-10-16).
         ("/etc/apparmor.d/bwrap", false),
         ("/etc/apparmor.d/usr.bin.bwrap", false),

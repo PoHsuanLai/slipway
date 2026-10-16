@@ -49,7 +49,7 @@ const fn rule(dir: &'static str, name: NameRule) -> SystemRule {
 }
 
 /// Every file a release may place, and nothing else.
-pub const ALLOWED_SYSTEM_FILES: [SystemRule; 17] = [
+pub const ALLOWED_SYSTEM_FILES: [SystemRule; 18] = [
     // The shell's login service.
     rule("/etc/pam.d", NameRule::Exact("sill")),
     // Brightness over the monitor's own bus.
@@ -64,6 +64,9 @@ pub const ALLOWED_SYSTEM_FILES: [SystemRule; 17] = [
         NameRule::Exact("keycap.polkit.rules"),
     ),
     rule("/etc/modules-load.d", NameRule::Exact("keycap.conf")),
+    // The desktop's vendor defaults for the keyboard daemon (the Caps Lock rule), read under the
+    // administrator's file. /etc/keycap stays the administrator's: no release places a file there.
+    rule("/usr/lib/keycap", NameRule::Exact("keycap.toml")),
     // The input service that owns the virtual keyboard device: its two units (socket-activated), the
     // rule that takes the device node away from the person's session, and the module it needs.
     rule(

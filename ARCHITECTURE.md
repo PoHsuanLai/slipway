@@ -111,7 +111,7 @@ rule, a login service, the keyboard daemon's unit). The bundle carries them unde
 path>`, `release.toml` lists each destination in `[[system]]`, and `SyncSystem` copies the verified file
 from the new release's tree (atomic rename, the listed mode). The destination must be a path `ALLOWED_SYSTEM_FILES` names:
 a folder and either one exact name or any plain name with a given ending. Today that is `/etc/pam.d/sill`,
-`/etc/udev/rules.d/{60-sill-ddc,70-keycap,70-palmrest}.rules`, `/etc/modules-load.d/{sill-ddc,keycap}.conf`,
+`/etc/udev/rules.d/{60-sill-ddc,70-keycap,70-palmrest}.rules`, `/etc/modules-load.d/{sill-ddc,keycap}.conf`, `/usr/lib/keycap/keycap.toml` (the desktop's vendor defaults for the keyboard daemon; `/etc/keycap` is the administrator's and is not on the list),
 `/etc/modprobe.d/99-palmrest.conf`, `/usr/lib/systemd/system/{keycap,turnstile}.service`,
 `/usr/lib/systemd/system/turnstile.socket`, `/etc/udev/rules.d/72-turnstile.rules`,
 `/etc/modules-load.d/turnstile.conf`, `/etc/polkit-1/rules.d/keycap.polkit.rules`, `/etc/porter/{callers,inferd-callers}.toml`,
@@ -119,7 +119,10 @@ a folder and either one exact name or any plain name with a given ending. Today 
 installed by hand and not by a release, so a new system file needs a new helper (this is the price of the list): a
 release that places the input service's files (`turnstile.*`, `72-turnstile.rules`) needs the helper that knows them,
 so re-run the installer (`scripts/install.sh`) from the new source before updating to it; an older helper refuses
-that release whole.
+that release whole. The same holds for `/usr/lib/keycap/keycap.toml`. A destination folder that does not exist
+(`/usr/lib/keycap` on a fresh machine) is made by the write itself (`write_atomic_mode` creates the missing
+parents, `0755` under the helper's umask) and is left in place when the file is later removed; the test
+`a_system_file_is_placed_replaced_and_dropped_with_the_releases` runs in a sandbox with no such folders.
 A file is overwritten or removed only when it still holds exactly what an earlier release placed
 (`slipway-core::plan_system`, by digest); a person's own file, an edited one, or a link is left alone and
 reported like a conflicting export. So is a name that is empty in `/etc` but that the distribution ships under
