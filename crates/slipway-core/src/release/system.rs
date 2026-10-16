@@ -14,7 +14,7 @@ use serde::Deserialize;
 pub const SYSTEM_TREE: &str = "system";
 
 /// The only folders a release may place a file in, and only directly in them (no sub-folders).
-pub const ALLOWED_SYSTEM_DIRS: [&str; 8] = [
+pub const ALLOWED_SYSTEM_DIRS: [&str; 9] = [
     "/etc/udev/rules.d",
     "/etc/modules-load.d",
     "/etc/modprobe.d",
@@ -23,6 +23,8 @@ pub const ALLOWED_SYSTEM_DIRS: [&str; 8] = [
     "/etc/polkit-1/rules.d",
     "/etc/porter",
     "/etc/quire",
+    // The desktop's system-wide default settings (the XDG config folder, read below the person's own).
+    "/etc/xdg/quire",
 ];
 
 /// A file the release places on the system: `path` is its absolute destination in one of

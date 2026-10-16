@@ -90,7 +90,7 @@ rule, a login service, the keyboard daemon's unit). The bundle carries them unde
 path>`, `release.toml` lists each destination in `[[system]]`, and `SyncSystem` copies the verified file
 from the new release's tree (atomic rename, the listed mode). The destination must be directly in one of
 `ALLOWED_SYSTEM_DIRS` (`/etc/udev/rules.d`, `/etc/modules-load.d`, `/etc/modprobe.d`, `/usr/lib/systemd/system`,
-`/etc/pam.d`, `/etc/polkit-1/rules.d`, `/etc/porter`, `/etc/quire`); anything else makes the whole release
+`/etc/pam.d`, `/etc/polkit-1/rules.d`, `/etc/porter`, `/etc/quire`, `/etc/xdg/quire`); anything else makes the whole release
 refused. A file is overwritten or removed only when it still holds exactly what an earlier release placed
 (`slipway-core::plan_system`, by digest); a person's own file, an edited one, or a link is left alone and
 reported like a conflicting export. A signed release can therefore put a file in these folders as root,

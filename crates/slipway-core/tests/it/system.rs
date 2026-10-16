@@ -17,7 +17,7 @@ fn doc_placing(dest: &str) -> Doc {
 #[test]
 fn a_system_file_is_accepted_only_directly_in_an_allowed_folder() {
     // (destination, accepted)
-    let table: [(&str, bool); 27] = [
+    let table: [(&str, bool); 30] = [
         ("/etc/udev/rules.d/70-keycap.rules", true),
         ("/etc/modules-load.d/keycap.conf", true),
         ("/etc/modprobe.d/99-palmrest.conf", true),
@@ -26,6 +26,7 @@ fn a_system_file_is_accepted_only_directly_in_an_allowed_folder() {
         ("/etc/polkit-1/rules.d/49-keycap.rules", true),
         ("/etc/porter/callers.toml", true),
         ("/etc/quire/policy.toml", true),
+        ("/etc/xdg/quire/intentd.toml", true),
         ("/etc/udev/rules.d/a@b+c_d-e.rules", true),
         // Not a listed folder.
         ("/etc/passwd", false),
@@ -40,6 +41,8 @@ fn a_system_file_is_accepted_only_directly_in_an_allowed_folder() {
         ("/etc/udev/rules.d2/x.rules", false),
         ("/etc/pam.d/sub/sill", false),
         ("/etc/quire2/x", false),
+        ("/etc/xdg/quire/sub/x.toml", false),
+        ("/etc/xdg/other.toml", false),
         // The folder itself, climbing, doubled slashes, hidden names, odd characters.
         ("/etc/pam.d", false),
         ("/etc/pam.d/", false),
