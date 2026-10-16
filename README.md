@@ -24,4 +24,10 @@ The script never builds as root. `--help` lists the options, and an existing set
 overwritten. Your own `~/.config/slipway/config.toml` may only set
 `settings_command` and `name`.
 
+The helper is installed by hand and only it decides which system files a release may place, so re-run
+the two steps above whenever a release is said to add system files (the input service's are the latest);
+an older helper refuses such a release whole. The update service answers `Install` and `Rollback` only for
+the desktop's own programs, which it knows from the root-owned table `/etc/quire/desktop-callers.toml` that
+the desktop's installer places; without that file it refuses both and says so in its log.
+
 See ARCHITECTURE.md.

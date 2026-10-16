@@ -1,4 +1,5 @@
 use crate::support::{Accept, Recipe, Reject, Sandbox, build, v};
+use peephole_bus::peephole_core::Table;
 use semver::Version;
 use slipway::config::Config;
 use slipway::elevate::{ApplyFailure, Elevate, Recovery};
@@ -214,7 +215,7 @@ impl Elevate for NoHelper {
     }
 }
 
-fn engine_serving(sandbox: &Sandbox, version: &str, store: &StateStore) -> Arc<Engine> {
+pub(crate) fn engine_serving(sandbox: &Sandbox, version: &str, store: &StateStore) -> Arc<Engine> {
     engine_with(sandbox, version, store, Arc::new(NoHelper))
 }
 
@@ -235,6 +236,7 @@ fn engine_with(
         anchor: Ok(Arc::new(Accept)),
         elevate,
         login: LoginSession::default(),
+        callers: Table::empty(),
         seed: 0,
     })
 }
@@ -348,7 +350,7 @@ fn wanting(text: &str) -> Wanted {
     Wanted::parse(text).expect("a version")
 }
 
-fn block_on<T>(work: impl std::future::Future<Output = T>) -> T {
+pub(crate) fn block_on<T>(work: impl std::future::Future<Output = T>) -> T {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()

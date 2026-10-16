@@ -1,8 +1,8 @@
 //! The session service: the bus object, the update flow behind it, notifications and the schedule.
 
-pub mod caller;
 mod context;
 mod engine;
+mod gate;
 mod notify;
 mod object;
 mod refusal;
@@ -12,6 +12,7 @@ mod wanted;
 
 pub use context::{Anchor, Context};
 pub use engine::{Engine, Job};
+pub use gate::{Gate, Peers, peers_on};
 pub use notify::is_from_owner;
 pub use object::{BUS_NAME, PATH, Updates};
 pub use refusal::InstallError;

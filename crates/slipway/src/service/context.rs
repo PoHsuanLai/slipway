@@ -6,6 +6,7 @@ use crate::fetch::{Fetch, Source};
 use crate::keys::KeyError;
 use crate::layout::Layout;
 use crate::state::StateStore;
+use peephole_bus::peephole_core::Table;
 use slipway_core::{Authenticator, LoginSession};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -33,6 +34,9 @@ pub struct Context {
     pub elevate: Arc<dyn Elevate>,
     /// The login this daemon runs in (the health marker's notion of "the same session").
     pub login: LoginSession,
+    /// The desktop's own programs, by role: who the callers of the bus object are judged against. An
+    /// empty table (none installed, or one that could not be trusted) lets no caller start anything.
+    pub callers: Table,
     /// A number that spreads this computer's checks over the hour.
     pub seed: u64,
 }

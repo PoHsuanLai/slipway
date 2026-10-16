@@ -23,11 +23,13 @@ semver.workspace = true
 time.workspace = true
 ureq.workspace = true
 zbus.workspace = true
+peephole-bus.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
+peephole-bus = { workspace = true, features = ["fake"] }
 tempfile.workspace = true
 tar.workspace = true
 zstd.workspace = true

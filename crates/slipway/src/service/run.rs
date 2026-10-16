@@ -2,6 +2,7 @@
 
 use super::context::Context;
 use super::engine::{Engine, Job};
+use super::gate::{Gate, peers_on};
 use super::notify::{self, RESTORED_TEXT};
 use super::object::{BUS_NAME, PATH, Updates};
 use crate::clock::now;
@@ -30,12 +31,17 @@ pub enum RunError {
 pub async fn run(ctx: Context) -> Result<(), RunError> {
     let health = on_start(&ctx.layout, &ctx.store, &*ctx.elevate, &ctx.login);
     let settings_command = ctx.config.settings_command.clone();
+    let callers = ctx.callers.clone();
     let engine = Engine::new(ctx);
-    let connection = zbus::connection::Builder::session()?
-        .name(BUS_NAME)?
-        .serve_at(PATH, Updates::new(Arc::clone(&engine)))?
-        .build()
+    // The object is in place before the name is taken, so nobody calls a service that has no object yet.
+    // Who is calling is asked of the bus, so the identification needs the connection first.
+    let connection = zbus::connection::Builder::session()?.build().await?;
+    let gate = Gate::new(peers_on(connection.clone(), callers));
+    connection
+        .object_server()
+        .at(PATH, Updates::new(Arc::clone(&engine), gate))
         .await?;
+    connection.request_name(BUS_NAME).await?;
     engine.connect(connection.clone());
     if health == Health::Restored
         && let Err(e) = notify::post(&connection, &engine.posted(), RESTORED_TEXT).await

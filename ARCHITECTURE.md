@@ -112,10 +112,14 @@ path>`, `release.toml` lists each destination in `[[system]]`, and `SyncSystem` 
 from the new release's tree (atomic rename, the listed mode). The destination must be a path `ALLOWED_SYSTEM_FILES` names:
 a folder and either one exact name or any plain name with a given ending. Today that is `/etc/pam.d/sill`,
 `/etc/udev/rules.d/{60-sill-ddc,70-keycap,70-palmrest}.rules`, `/etc/modules-load.d/{sill-ddc,keycap}.conf`,
-`/etc/modprobe.d/99-palmrest.conf`, `/usr/lib/systemd/system/keycap.service`,
-`/etc/polkit-1/rules.d/keycap.polkit.rules`, `/etc/porter/{callers,inferd-callers}.toml`,
+`/etc/modprobe.d/99-palmrest.conf`, `/usr/lib/systemd/system/{keycap,turnstile}.service`,
+`/usr/lib/systemd/system/turnstile.socket`, `/etc/udev/rules.d/72-turnstile.rules`,
+`/etc/modules-load.d/turnstile.conf`, `/etc/polkit-1/rules.d/keycap.polkit.rules`, `/etc/porter/{callers,inferd-callers}.toml`,
 `/etc/quire/*-callers.toml` and `/etc/xdg/quire/*.toml`; anything else makes the whole release refused. The helper is
-installed by hand and not by a release, so a new system file needs a new helper (this is the price of the list).
+installed by hand and not by a release, so a new system file needs a new helper (this is the price of the list): a
+release that places the input service's files (`turnstile.*`, `72-turnstile.rules`) needs the helper that knows them,
+so re-run the installer (`scripts/install.sh`) from the new source before updating to it; an older helper refuses
+that release whole.
 A file is overwritten or removed only when it still holds exactly what an earlier release placed
 (`slipway-core::plan_system`, by digest); a person's own file, an edited one, or a link is left alone and
 reported like a conflicting export. So is a name that is empty in `/etc` but that the distribution ships under
@@ -123,6 +127,15 @@ the same name in its own folder (`/usr/lib/pam.d`, `/usr/lib/udev/rules.d`, `/us
 `/usr/lib/modprobe.d`, `/usr/share/polkit-1/rules.d`: Fedora and Arch keep them there; `vendor_copies`): placing ours
 would hide the vendor's. The desktop's `pack` step must mirror the same list and fail when `system/` holds a path
 it does not name.
+
+Telling the system (`apply/settle.rs`): after the system files are placed or removed the helper makes them take
+effect, with programs found at fixed paths (never `PATH`). `commands` decides from the changed paths alone: a file in
+`/usr/lib/systemd/system` gets `systemctl daemon-reload`; a file in `/etc/udev/rules.d` gets `udevadm control
+--reload-rules` and `udevadm trigger --subsystem-match=misc`; the file `turnstile.socket` being *placed* (not removed)
+also gets `systemctl enable --now turnstile.socket`, after the reload. A missing program is skipped and a failing one
+is a warning in the report, as with the security labels: the files are in place either way. It is a second method on
+the `Relabel` seam (`settle`, a no-op by default), implemented by `Settling` (the real helper's choice, wrapping
+`Selinux`), so tests that use `NoRelabel` or a fake never run a real program.
 
 SELinux: after a release is published and before it becomes current, and after system files are
 placed, the helper runs `restorecon -RF <root>` and `restorecon -F <files>` (`apply/relabel.rs`), only when
@@ -200,13 +213,21 @@ leaves the state at "installing" for ever.
 Properties (all emit `PropertiesChanged`): `State` (idle, checking, available, downloading, ready,
 installing, installed, failed), `Current`, `Available` ("" when none), `Notes`, `Size` (bytes),
 `Progress` (permille), `LastChecked` (unix seconds, 0 never), `Problem` (plain words).
-Methods: `Check()`, `Install(version: s)`, `Rollback()`. `Rollback()` is answered only for a caller that is the
-shell's unit or the Settings app (`callers` in the system settings, default `sill.service`, `org.quire.Settings` (an app a launcher started)
-and `org.quire.Settings.service` (the same app started by bus activation, which runs as that unit); the bus names the caller's process and `/proc/<pid>/cgroup` the unit or app scope it runs in,
-`service/caller.rs`), and the system then asks for the administrator's password. The caller check keeps a stray
-program from putting a password prompt in front of the person; it is not a boundary (a program of the person can
-start itself in a scope of its choosing), the password is. `Install(version)` is open to any caller on the person's own
-session bus, as before: it can only install a newer release signed by the project. The caller names the
+Methods: `Check()`, `Install(version: s)`, `Rollback()`. Who is calling is decided by peephole (`service/gate.rs`):
+the bus names the caller's process, peephole holds it by the descriptor the bus daemon gave, reads its image and its
+unit and judges it against the desktop's own table (`/etc/quire/desktop-callers.toml`, root-owned; loaded once at
+start by `bootstrap.rs`, an empty table when it is missing or not trustworthy, which refuses every `Install` and
+`Rollback`). `Install` is answered for the roles `shell` (proved up to the unit manager), `settings` and
+`updater_cli` (the `slipway` program itself; both known by their root-owned image); `Rollback` for `shell` and
+`settings`, and the system then asks for the administrator's password; `Check` for any caller that can be
+identified at all. A refused `Rollback` or `Check` is `org.freedesktop.DBus.Error.AccessDenied` with a plain
+sentence; a refused `Install` is `org.quire.Updates1.Error.AccessDenied` with its own (all in `problem.rs`).
+The properties are served by the bus library to any caller on the person's session bus and are not gated: they hold
+the version numbers, the notes and a state word. The gate keeps a stray program from starting an update nobody clicked
+or from putting a password prompt in front of the person; it is not the boundary for a downgrade (the password is: a
+program of the person can run the genuine image of a listed program with a preloaded library). `Install(version)`
+can in any case only install a newer release signed by the project.
+The caller names the
 version it showed the person (a semver string of at most `MAX_VERSION_BYTES` = 64 bytes, `service/wanted.rs`); the
 service installs only when the version it would install is that one, so a release that arrived between showing
 and pressing is never installed unseen. A mismatch (or no update on offer) is refused with the error

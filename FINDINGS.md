@@ -103,13 +103,37 @@ Departures from the plan, standing facts and open items. An entry names the cond
     invisible to it. If the owner wants a one-boot loop to recover, the desktop's crash guard has to say
     so on a channel root can trust (there is none today).23. **Going back asks for the administrator's password (ROOT-04, owner 2026-10-16).** A rollback is a downgrade
     with no signature check on the way down, so it is its own program and polkit action (ARCHITECTURE s.5), and
-    the service answers `Rollback()` only for the shell's unit and the Settings app (`callers`). Not closed here:
+    the service answers `Rollback()` only for the shell and the Settings app (decision 24). Not closed here:
     "a floor version a rollback may not go below" in root-owned state, which would make a security fix
-    un-roll-back-able even with the password. `Install(version)` over the bus is not gated by caller: starting an update nobody clicked is
-    limited to a newer signed release, which is what the daily check would offer anyway, and (since the
-    version argument, ROOT-04) to the exact version the caller names, so a release that arrived after the person
-    was shown another is never installed unseen (ARCHITECTURE s.6). The CLI `slipway rollback` from a terminal is refused by the caller check (it runs in a
-    terminal's scope); the way back there is `pkexec /usr/libexec/slipway-rollback`.
+    un-roll-back-able even with the password. `Install(version)` is limited to a newer release signed by the project
+    and (since the version argument, ROOT-04) to the exact version the caller names, so a release that arrived after
+    the person was shown another is never installed unseen (ARCHITECTURE s.6). The CLI `slipway rollback` from a
+    terminal is refused by the gate; the way back there is `pkexec /usr/libexec/slipway-rollback`.
+24. **Callers are identified by peephole, not by the name of their cgroup (ROOT-04 daemon side, wave 2).**
+    `service/caller.rs` and the `callers` setting (a list of unit and app names; the settings file may still carry the
+    key, it is ignored) are gone; `service/gate.rs` asks peephole which program is calling and checks roles from the
+    desktop's table: `Install` for `shell` (at `Full`, the unit manager confirms its unit), `settings` and
+    `updater_cli` (the `slipway` program; both at `Exe`, because Settings is also started by a launcher and the program
+    from a terminal, neither of which has a unit to prove); `Rollback` for `shell` and `settings`; `Check` for any
+    caller peephole can identify at all (an unreadable or vanished sender is refused; an unverified one is not, since
+    `Check` only looks). Replaced by the table: `DEFAULT_CALLERS`, `Config::callers`, `leaf_of`, `is_allowed`.
+    Consequences: (a) the table `/etc/quire/desktop-callers.toml` must be installed or every `Install` and `Rollback`
+    is refused, with a line in the service's log; the desktop's installer places it (lane pa2-desk), and until then
+    the old open `Install` is closed on a machine without it. (b) `Settings` started by a launcher is `Program`, not
+    `settings`, unless the table also has a row for it without a unit (interface ask to peephole's
+    `dist/desktop-callers.toml`: a second `settings` row, `app = "org.quire.Settings"`, no `unit`, the `detent` images).
+    (c) A refused `Install` is `org.quire.Updates1.Error.AccessDenied`, in the family of the other `Install` errors
+    (the error type that carries them cannot name another family); a refused `Rollback` or `Check` is the bus's own
+    `AccessDenied`. (d) The properties are not gated.
+25. **The input service's files are allowed, and the helper tells the system (wave 2, pa2-slip).** Four exact rules
+    were added (`turnstile.socket`, `turnstile.service` under `/usr/lib/systemd/system`, `72-turnstile.rules`,
+    `turnstile.conf`); the design text says "three new rules" but lists four files, and the four files are the
+    turnstile lane's. After placing or removing system files the helper runs `daemon-reload`, the udev reload and
+    trigger for misc devices, and `enable --now turnstile.socket` (ARCHITECTURE s.4, `apply/settle.rs`). The helper is
+    installed by hand, so an existing install must re-run `scripts/install.sh` before the first release that
+    places these files; an older helper refuses that release whole. Not done: disabling the socket when a release
+    stops listing it (only the reload runs), and loading the `uinput` module at once (it loads at the next boot, or
+    when the service starts and needs it).
 
 ## Open questions
 
@@ -222,8 +246,7 @@ Production-audit lane pa-slip (2026-10-16) was also written without a compiler. 
 - `Cargo.lock`: `rustix` (features `std`, `fs`, `process`; already in the lock at 1.1.x) is a new direct dependency
   of `slipway`; the lock file needs refreshing. `rustix::fs::statvfs`, `rustix::process::{umask, chdir,
   setrlimit, geteuid}` and `rustix::fs::mkfifoat` (tests) were read against rustix 1.1.5's source only.
-- `service/object.rs` / `service/caller.rs`: the `#[zbus(header)]` and `#[zbus(connection)]` parameters on
-  `Rollback` (copied from sill's picker object), `DBusProxy::get_connection_credentials(..).process_id()`.
+- `service/object.rs`: the `#[zbus(header)]` parameter on the methods (copied from sill's picker object).
 - `fetch/ureq_fetch.rs`: `RequestBuilder::header("Range", String)`, `response.status().as_u16()`,
   `timeout_recv_response` / `timeout_recv_body` on the config builder (ureq 3.4.2).
 - `slipway-root` `apply/step.rs` `Switch` / `Links` rewind, and the `Result<Result<..>, JoinError>` handling in
@@ -233,8 +256,8 @@ Production-audit lane pa-slip (2026-10-16) was also written without a compiler. 
   does not set explicitly.
 - The polkit file (`dist/org.quire.slipway.policy`) now holds three actions; `pkexec` finds the one for a
   program by the `exec.path` annotation, so the three programs must be installed at the paths it names.
-- Not covered by any test (needs a bus or a real polkit): the caller check on `Rollback()` end to end, and the
-  password prompt. The pure parts (`leaf_of`, `is_allowed`) are table tests.
+- Not covered by any test (needs a real polkit): the password prompt. The caller checks are tested on a private bus
+  (`tests/it/caller_gate.rs`).
 
 ## Production-audit lane pa-slip2 (2026-10-16)
 
@@ -280,3 +303,25 @@ Deferred or to check:
   that no test in `slipway` still uses an item trimmed from its `support.rs` (`pack_special`, `build_around`, `read`,
   `link`, `previous`, `releases`), and `install -m` placing the file with exactly the mode asked on GNU and busybox
   `install` (the script then compares modes with `stat`, as before).
+
+## Production-audit lane pa2-slip (2026-10-16)
+
+Written without a compiler (only `cargo fmt -p`). Done: ROOT-04 daemon side (decision 24), the allow-list rules and the
+helper's reload step (decision 25). Look first at:
+
+- `Cargo.lock`: `peephole-bus` (git tag `v0.1.0`; features `tokio`, `desktop`; `fake` in dev) is a new direct dependency of
+  `slipway`, with `peephole`, `peephole-core` and a second `toml` major (1.x) behind it. `deny.toml` has no `[sources]`
+  table, so a git source is only a warning; add `allow-git` for the peephole repository if the gate treats it as an error.
+- `service/run.rs`: the object is now served on a connection built without a name, then the name is requested
+  (`Connection::object_server().at(..)`, `Connection::request_name(..)`), because the identification needs the connection.
+- `service/gate.rs`: `BusPeers::new(..).with_offload(Tokio)` is the type `BusPeers<RealProc, Tokio>` (default third
+  parameter); `Send` for the futures of `require`/`who` inside a zbus interface method; `Header::sender()` borrowed across an
+  await.
+- `service/refusal.rs`: the derive names the new variant `org.quire.Updates1.Error.AccessDenied`.
+- `slipway-root/src/apply/settle.rs`: the program lists are fixed paths; `Fake` in `system_applied.rs` answers by exact path.
+- Tests `caller_gate.rs` need `dbus-daemon` on `PATH` (as peephole's own tests do) and the `fake` feature of
+  `peephole-bus` (dev-dependency); they start a private bus and never touch the session bus. `Settings` is introduced at
+  `Exe` and the shell at `Full` there; the real judgement of a process is peephole's own tests.
+- Not covered by a test: the real table loader in `bootstrap.rs`, and the helper running the real `systemctl` and `udevadm`.
+- Interface ask to the desktop (pa2-desk): the installer places `/etc/quire/desktop-callers.toml` (the existing
+  `/etc/quire/*-callers.toml` rule already covers that name), with the `settings` row without a unit described in decision 24.

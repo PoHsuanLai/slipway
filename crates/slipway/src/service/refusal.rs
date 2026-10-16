@@ -13,6 +13,8 @@ pub enum InstallError {
     NotAVersion(String),
     /// The update on offer is not the version the caller showed: a newer one arrived, or none is on offer.
     VersionChanged(String),
+    /// The program that asked is not one that may start an update.
+    AccessDenied(String),
     /// Anything else that stops the install from starting, such as work already in progress.
     Refused(String),
 }
@@ -23,6 +25,7 @@ impl From<Problem> for InstallError {
         match problem {
             Problem::NotAVersion => Self::NotAVersion(text),
             Problem::VersionChanged => Self::VersionChanged(text),
+            Problem::InstallNotFromHere | Problem::CallerUnknown => Self::AccessDenied(text),
             _ => Self::Refused(text),
         }
     }

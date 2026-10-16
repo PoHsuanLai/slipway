@@ -48,7 +48,7 @@ fn the_system_file_decides_where_and_what_and_the_person_only_what_is_shown() {
         &user,
         "root = \"/home/p/evil\"\npubkey_path = \"/home/p/evil.pub\"\nindex_url = \"https://evil.test\"\n\
          apply_path = \"/home/p/evil\"\nrollback_path = \"/home/p/evil\"\nhealth_path = \"/home/p/evil\"\n\
-         callers = [\"evil.service\"]\nsettings_command = \"open-it now\"\n",
+         settings_command = \"open-it now\"\n",
     )
     .expect("write");
     let config = Config::load_layered(&system, &user).expect("layered");
@@ -58,7 +58,6 @@ fn the_system_file_decides_where_and_what_and_the_person_only_what_is_shown() {
     assert_eq!(config.apply_path, Config::default().apply_path);
     assert_eq!(config.rollback_path, Config::default().rollback_path);
     assert_eq!(config.health_path, Config::default().health_path);
-    assert_eq!(config.callers, Config::default().callers);
     assert_eq!(config.settings_command, "open-it now");
     assert_eq!(
         config.name, "Quire Lab",
@@ -299,6 +298,9 @@ fn what_a_person_reads_names_no_tool_or_protocol() {
         Problem::NothingToRestore,
         Problem::NotAVersion,
         Problem::VersionChanged,
+        Problem::InstallNotFromHere,
+        Problem::RollbackNotFromHere,
+        Problem::CallerUnknown,
         Problem::Other,
     ];
     for problem in all {
@@ -361,6 +363,14 @@ fn a_refused_install_has_a_name_of_its_own_and_a_plain_sentence() {
         (
             Problem::VersionChanged,
             "org.quire.Updates1.Error.VersionChanged",
+        ),
+        (
+            Problem::InstallNotFromHere,
+            "org.quire.Updates1.Error.AccessDenied",
+        ),
+        (
+            Problem::CallerUnknown,
+            "org.quire.Updates1.Error.AccessDenied",
         ),
         (Problem::Busy, "org.quire.Updates1.Error.Refused"),
         (Problem::Offline, "org.quire.Updates1.Error.Refused"),

@@ -9,10 +9,24 @@ use crate::keys::load_key;
 use crate::layout::Layout;
 use crate::service::{Anchor, Context};
 use crate::state::StateStore;
+use peephole_bus::peephole::{RealProc, TableFiles};
+use peephole_bus::peephole_core::Table;
 use slipway_core::Authenticator;
 use std::sync::Arc;
 
 const MACHINE_ID: &str = "/etc/machine-id";
+
+/// The desktop's table of its own programs from `/etc/quire`. A table that is missing or that cannot
+/// be trusted (not root-only, not a table) is an empty one: no caller then counts as the shell, Settings
+/// or the `slipway` program, and the service says why in its log.
+fn desktop_table() -> Table {
+    TableFiles::desktop()
+        .load(&RealProc::system())
+        .unwrap_or_else(|why| {
+            tracing::warn!("the table of the desktop's own programs was not used: {why}");
+            Table::empty()
+        })
+}
 
 /// The context for the real system: the configured root, the real key, ureq, pkexec.
 pub fn production(config: Config, dirs: &Dirs) -> Context {
@@ -28,6 +42,7 @@ pub fn production(config: Config, dirs: &Dirs) -> Context {
         anchor,
         elevate: Arc::new(Pkexec::new(Helpers::from(&config))),
         login: crate::login::current(),
+        callers: desktop_table(),
         seed,
         config,
     }

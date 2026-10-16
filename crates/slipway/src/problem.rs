@@ -27,6 +27,12 @@ pub enum Problem {
     NotAVersion,
     /// The update on offer is not the one the caller showed the person.
     VersionChanged,
+    /// A program that may not start an update asked to install one.
+    InstallNotFromHere,
+    /// A program that may not ask to go back asked to.
+    RollbackNotFromHere,
+    /// The program that asked could not be told apart from any other.
+    CallerUnknown,
     /// Anything else.
     Other,
 }
@@ -52,6 +58,13 @@ impl Problem {
             Self::NotAVersion => "That is not a version of the software.",
             Self::VersionChanged => {
                 "A different update is on offer now. Look at it again before installing."
+            }
+            Self::InstallNotFromHere => "Updates are installed from Software Update in Settings.",
+            Self::RollbackNotFromHere => {
+                "Going back to an earlier version is done from Settings, where you will be asked for your password."
+            }
+            Self::CallerUnknown => {
+                "The program that asked could not be recognised, so nothing was done."
             }
             Self::Other => "The update could not be installed. Try again later.",
         }

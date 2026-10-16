@@ -27,15 +27,6 @@ pub const DEFAULT_APPLY_PATH: &str = "/usr/libexec/slipway-apply";
 pub const DEFAULT_ROLLBACK_PATH: &str = "/usr/libexec/slipway-rollback";
 /// Where the program that keeps the root-side health record lives.
 pub const DEFAULT_HEALTH_PATH: &str = "/usr/libexec/slipway-health";
-/// Who may ask the update service to go back to the previous version: the shell's unit, and the
-/// Settings app that shows the Software Update page: by its app id when a launcher started it, and by
-/// the unit `org.quire.Settings.service` when the session bus started it on demand.
-pub const DEFAULT_CALLERS: [&str; 3] = [
-    "sill.service",
-    "org.quire.Settings",
-    "org.quire.Settings.service",
-];
-
 /// The settings, each with a default.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(default)]
@@ -56,8 +47,6 @@ pub struct Config {
     pub rollback_path: PathBuf,
     /// The path of the helper that keeps the health record.
     pub health_path: PathBuf,
-    /// The units and apps the update service lets ask for a rollback.
-    pub callers: Vec<String>,
 }
 
 impl Default for Config {
@@ -71,7 +60,6 @@ impl Default for Config {
             apply_path: PathBuf::from(DEFAULT_APPLY_PATH),
             rollback_path: PathBuf::from(DEFAULT_ROLLBACK_PATH),
             health_path: PathBuf::from(DEFAULT_HEALTH_PATH),
-            callers: DEFAULT_CALLERS.iter().map(|c| (*c).to_owned()).collect(),
         }
     }
 }
