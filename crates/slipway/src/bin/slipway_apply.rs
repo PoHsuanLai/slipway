@@ -4,6 +4,7 @@
 //! signature and every digest are checked again here against the key installed on this computer.
 //! The install root and key come from `/etc/slipway/config.toml`, never from the caller.
 
+use slipway::apply::harden::reset_process;
 use slipway::apply::{ApplyError, ExitCode as Code, Selinux, install_with, rollback_with};
 use slipway::config::{Config, SYSTEM_CONFIG_PATH};
 use slipway::keys::{KeyError, load_key};
@@ -41,6 +42,13 @@ fn finish(code: Code) -> ExitCode {
 }
 
 fn main() -> ExitCode {
+    // First of all, before anything is created or read: the umask, the working folder and the limits
+    // come from whoever ran pkexec.
+    let reset = reset_process();
+    if let Err(e) = reset {
+        eprintln!("slipway-apply: could not prepare to run: {e}");
+        return finish(Code::Failed);
+    }
     if std::env::args()
         .nth(1)
         .is_some_and(|a| a == "--help" || a == "-h")
@@ -61,16 +69,20 @@ fn main() -> ExitCode {
     };
     let layout = Layout::new(config.root.clone());
     let relabel = Selinux::system();
+    let key = match load_key(&config.pubkey_path) {
+        Ok(key) => key,
+        Err(KeyError::Missing) => {
+            eprintln!("slipway-apply: {}", ApplyError::NoKey);
+            return finish(Code::NoKey);
+        }
+        Err(KeyError::Unreadable) => {
+            eprintln!("slipway-apply: the key to check updates with cannot be read");
+            return finish(Code::NoKey);
+        }
+    };
     let result = match request {
-        Request::Rollback => rollback_with(&layout, &relabel),
-        Request::Install(dir) => match load_key(&config.pubkey_path) {
-            Ok(key) => install_with(&layout, &dir, &key, &relabel),
-            Err(KeyError::Missing) => Err(ApplyError::NoKey),
-            Err(KeyError::Unreadable) => {
-                eprintln!("slipway-apply: the key to check updates with cannot be read");
-                return finish(Code::NoKey);
-            }
-        },
+        Request::Rollback => rollback_with(&layout, &key, &relabel),
+        Request::Install(dir) => install_with(&layout, &dir, &key, &relabel),
     };
     match result {
         Ok(applied) => {

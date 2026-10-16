@@ -24,6 +24,24 @@ pub enum ExitCode {
     NoKey = 6,
 }
 
+/// Whether the earlier release was put back after a failure past the switch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Back {
+    /// The links point at the earlier release again.
+    Restored,
+    /// They could not be moved back: the new release is still current.
+    NotRestored,
+}
+
+impl std::fmt::Display for Back {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Restored => "the earlier version was put back",
+            Self::NotRestored => "the earlier version could not be put back",
+        })
+    }
+}
+
 /// Why an install or rollback did not happen.
 #[derive(Debug, thiserror::Error)]
 pub enum ApplyError {
@@ -45,6 +63,17 @@ pub enum ApplyError {
     /// Another update holds the lock.
     #[error("another update is already running")]
     Busy,
+    /// A file in the installed release is not the one that was signed.
+    #[error("{0} is not what the release was signed with, so it was not put in place")]
+    Changed(String),
+    /// Something failed after the new release became current; the old one was put back where possible.
+    #[error("{cause}; {back}")]
+    AfterSwitch {
+        /// What failed.
+        cause: Box<ApplyError>,
+        /// Whether the earlier version is back.
+        back: Back,
+    },
     /// A file operation failed.
     #[error("{what}: {source}")]
     Io {
@@ -66,10 +95,11 @@ impl ApplyError {
     pub fn exit_code(&self) -> ExitCode {
         match self {
             Self::NoKey => ExitCode::NoKey,
-            Self::Staged(StagedError::Io { .. }) | Self::Io { .. } | Self::Unpack(_) => {
-                ExitCode::Failed
-            }
-            Self::Staged(_) | Self::Bundle(_) => ExitCode::Unverified,
+            Self::Staged(StagedError::Io { .. } | StagedError::NoSpace)
+            | Self::Io { .. }
+            | Self::Unpack(_) => ExitCode::Failed,
+            Self::Staged(_) | Self::Bundle(_) | Self::Changed(_) => ExitCode::Unverified,
+            Self::AfterSwitch { cause, .. } => cause.exit_code(),
             Self::Plan(_) => ExitCode::Refused,
             Self::Busy => ExitCode::Busy,
         }

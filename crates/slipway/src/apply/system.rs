@@ -1,41 +1,43 @@
 //! Makes the system files on this computer match a release's `[[system]]` list.
 //!
-//! Each file is copied out of the release's own (already verified) tree, so what is placed is exactly
-//! what was signed. A file is replaced or removed only when it still holds what an earlier release
-//! placed; anything else at a destination is left alone and reported.
+//! Each file is read from the release's own tree through a handle this code opens, hashed against the
+//! digest the signed description lists, and only then written; what is placed is exactly what was
+//! signed, whatever happened to the tree since it was unpacked. A file is replaced or removed only
+//! when it still holds what an earlier release placed; anything else at a destination is left alone and
+//! reported.
 
 use super::error::ApplyError;
 use super::exports::recorded;
+use super::open::{Capped, read_capped};
 use super::relabel::{Reach, Relabel, Relabeled};
+use super::synced::Synced;
 use crate::fsutil::write_atomic_mode;
 use crate::layout::Layout;
 use semver::Version;
-use slipway_core::{Placement, Sha256Hex, SystemAction, SystemFound, placements, plan_system};
+use slipway_core::{
+    Authenticator, Placement, Sha256Hex, SystemAction, SystemFound, placements, plan_system,
+};
 use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
 
-/// The largest existing file that is read to compare it: a system file of ours is small.
-const MAX_COMPARED_BYTES: u64 = 1 << 20;
+/// The largest system file read: ours are small, and a larger existing one is not ours.
+const MAX_SYSTEM_FILE_BYTES: u64 = 1 << 20;
 
-/// What a system step did.
-#[derive(Debug, Default)]
-pub struct Synced {
-    /// Destinations left alone because something else is there.
-    pub conflicts: Vec<String>,
-    /// Plain notes about labels that could not be set.
-    pub warnings: Vec<String>,
+fn placed(
+    layout: &Layout,
+    auth: &dyn Authenticator,
+    version: &Version,
+) -> Result<Vec<Placement>, ApplyError> {
+    placements(&recorded(layout, auth, version)?).map_err(|e| ApplyError::Unpack(e.to_string()))
 }
 
-fn placed(layout: &Layout, version: &Version) -> Result<Vec<Placement>, ApplyError> {
-    placements(&recorded(layout, version)?).map_err(|e| ApplyError::Unpack(e.to_string()))
-}
-
+/// What is at `path`.
 fn observe(layout: &Layout, path: &str) -> io::Result<SystemFound> {
     let at = layout.export_path(path);
     match fs::symlink_metadata(&at) {
-        Ok(meta) if meta.file_type().is_file() && meta.len() <= MAX_COMPARED_BYTES => {
+        Ok(meta) if meta.file_type().is_file() && meta.len() <= MAX_SYSTEM_FILE_BYTES => {
             Ok(SystemFound::File(Sha256Hex::of(&fs::read(&at)?)))
         }
         Ok(_) => Ok(SystemFound::Foreign),
@@ -44,16 +46,36 @@ fn observe(layout: &Layout, path: &str) -> io::Result<SystemFound> {
     }
 }
 
+/// The contents to place for `item`, read from the release's tree and checked against the digest the
+/// signed description lists.
+fn contents(layout: &Layout, to: &Version, item: &Placement) -> Result<Vec<u8>, ApplyError> {
+    let source = layout.release_dir(to).join(item.source.as_path());
+    let what = format!("reading the contents of {}", item.path);
+    let changed = || ApplyError::Changed(item.path.clone());
+    match read_capped(&source, MAX_SYSTEM_FILE_BYTES as usize).map_err(ApplyError::io(what))? {
+        Capped::Bytes(bytes) if Sha256Hex::of(&bytes) == item.sha256 => Ok(bytes),
+        Capped::Bytes(_) | Capped::TooLarge => Err(changed()),
+    }
+}
+
 /// Brings the system files in line with those of `to`, dropping those only `from` had.
 pub fn sync_system(
     layout: &Layout,
+    auth: &dyn Authenticator,
     from: Option<&Version>,
     to: &Version,
     relabel: &dyn Relabel,
 ) -> Result<Synced, ApplyError> {
-    let new = placed(layout, to)?;
-    let old = match from {
-        Some(version) => placed(layout, version).unwrap_or_default(),
+    let mut synced = Synced::default();
+    let new = placed(layout, auth, to)?;
+    let old = match from.map(|version| (version, placed(layout, auth, version))) {
+        Some((_, Ok(list))) => list,
+        Some((version, Err(why))) => {
+            synced.warnings.push(format!(
+                "the system files of version {version} were left as they are: {why}"
+            ));
+            Vec::new()
+        }
         None => Vec::new(),
     };
     let mut found = BTreeMap::new();
@@ -62,14 +84,11 @@ pub fn sync_system(
             .map_err(ApplyError::io(format!("looking at {}", item.path)))?;
         found.insert(item.path.clone(), seen);
     }
-    let mut synced = Synced::default();
     let mut written: Vec<PathBuf> = Vec::new();
     for action in plan_system(&new, &old, &found) {
         match action {
             SystemAction::Place(item) => {
-                let bytes = fs::read(layout.release_dir(to).join(item.source.as_path())).map_err(
-                    ApplyError::io(format!("reading the contents of {}", item.path)),
-                )?;
+                let bytes = contents(layout, to, &item)?;
                 let at = layout.export_path(&item.path);
                 write_atomic_mode(&at, &bytes, item.mode)
                     .map_err(ApplyError::io(format!("placing {}", item.path)))?;

@@ -1,4 +1,4 @@
-use crate::support::{Recipe, Sandbox, build, v};
+use crate::support::{Accept, Recipe, Sandbox, build, v};
 use slipway::elevate::{ApplyFailure, Elevate};
 use slipway::health::{Health, on_start};
 use slipway::state::StateStore;
@@ -20,7 +20,7 @@ impl Elevate for Recording<'_> {
 
     fn rollback(&self) -> Result<(), ApplyFailure> {
         self.calls.lock().expect("lock").push("rollback");
-        slipway::apply::rollback(&self.sandbox.layout)
+        slipway::apply::rollback(&self.sandbox.layout, &Accept)
             .map(drop)
             .map_err(|e| ApplyFailure {
                 code: Some(e.exit_code() as i32),

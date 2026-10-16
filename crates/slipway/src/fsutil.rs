@@ -1,8 +1,8 @@
 //! Small durable file operations: atomic replace, symlink switch, directory modes and flush.
 
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::{self, Write};
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt, symlink};
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
 
 fn sibling(path: &Path, suffix: &str) -> PathBuf {
@@ -17,6 +17,12 @@ fn sibling(path: &Path, suffix: &str) -> PathBuf {
 /// Flushes a directory's entries to disk.
 pub fn sync_dir(dir: &Path) -> io::Result<()> {
     File::open(dir)?.sync_all()
+}
+
+/// Makes `path` and any missing parents, each created with `mode` (less the process's umask, so a
+/// caller that needs the exact bits sets them afterwards).
+pub fn create_dirs(path: &Path, mode: u32) -> io::Result<()> {
+    DirBuilder::new().recursive(true).mode(mode).create(path)
 }
 
 /// Writes `bytes` to `path` so a reader sees the old file or the whole new one: write beside it,
@@ -37,7 +43,7 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
 /// removed first, never written through.
 pub fn write_atomic_mode(path: &Path, bytes: &[u8], mode: u32) -> io::Result<()> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    fs::create_dir_all(parent)?;
+    create_dirs(parent, 0o755)?;
     let staged = sibling(path, ".new");
     match fs::remove_file(&staged) {
         Ok(()) => {}

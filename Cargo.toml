@@ -28,6 +28,9 @@ sha2 = "0.11"
 time = { version = "0.3", features = ["serde", "formatting", "parsing", "macros"] }
 # Download over HTTPS with rustls (MIT OR Apache-2.0); blocking, run off the async runtime.
 ureq = { version = "3.4", default-features = false, features = ["rustls", "json"] }
+# The helper's own process state (umask, limits, working folder), file system sizes and the effective
+# user, without `unsafe` (MIT OR Apache-2.0; already in the lock file through tempfile).
+rustix = { version = "1", default-features = false, features = ["std", "fs", "process"] }
 tar = "0.4.46"
 zstd = "0.13"
 zbus = { version = "5.19", default-features = false, features = ["tokio"] }

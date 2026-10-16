@@ -1,13 +1,14 @@
 //! The two operations: install a staged release, or roll back.
 
 use super::error::ApplyError;
+use super::exports::recorded;
 use super::lock::Lock;
 use super::relabel::{NoRelabel, Relabel};
 use super::staged::Staged;
 use super::step::run;
 use crate::layout::Layout;
 use semver::Version;
-use slipway_core::{Authenticator, plan_install, plan_rollback};
+use slipway_core::{Authenticator, Step, plan_install, plan_rollback};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -35,7 +36,7 @@ fn locked(layout: &Layout) -> Result<Lock, ApplyError> {
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o755))
             .map_err(ApplyError::io("opening the install folder"))?;
     }
-    Lock::take(&layout.lock_file())
+    Lock::take(layout)
 }
 
 fn read_installed(layout: &Layout) -> Result<slipway_core::Installed, ApplyError> {
@@ -56,6 +57,10 @@ pub fn install(
 }
 
 /// [`install`], setting the new files' security labels with `relabel` where the computer uses them.
+///
+/// The signature is checked first and the plan is made from the signed version, so an older release is
+/// refused before a byte of its bundle is read. The bundle is then copied once into a private file
+/// while it is hashed, and the unpack reads that copy.
 pub fn install_with(
     layout: &Layout,
     staged_dir: &Path,
@@ -63,10 +68,11 @@ pub fn install_with(
     relabel: &dyn Relabel,
 ) -> Result<Applied, ApplyError> {
     let _lock = locked(layout)?;
-    let staged = Staged::read(staged_dir, auth)?;
+    let staged = Staged::describe(staged_dir, auth)?;
     let version = staged.release.version.clone();
     let steps = plan_install(&read_installed(layout)?, &version)?;
-    let done = run(layout, &steps, Some(&staged), relabel)?;
+    let sealed = staged.seal(&layout.private_dir())?;
+    let done = run(layout, &steps, Some(&sealed), auth, relabel)?;
     Ok(Applied {
         version,
         conflicts: done.conflicts,
@@ -74,17 +80,27 @@ pub fn install_with(
     })
 }
 
-/// Goes back to the previous release; the release left becomes the new `previous`.
-pub fn rollback(layout: &Layout) -> Result<Applied, ApplyError> {
-    rollback_with(layout, &NoRelabel)
+/// Goes back to the previous release; the release left becomes the new `previous`. The record kept in
+/// the release being returned to must verify with `auth` before anything moves.
+pub fn rollback(layout: &Layout, auth: &dyn Authenticator) -> Result<Applied, ApplyError> {
+    rollback_with(layout, auth, &NoRelabel)
 }
 
 /// [`rollback`], setting the labels of any system files put back with `relabel`.
-pub fn rollback_with(layout: &Layout, relabel: &dyn Relabel) -> Result<Applied, ApplyError> {
+pub fn rollback_with(
+    layout: &Layout,
+    auth: &dyn Authenticator,
+    relabel: &dyn Relabel,
+) -> Result<Applied, ApplyError> {
     let _lock = locked(layout)?;
     let installed = read_installed(layout)?;
     let steps = plan_rollback(&installed)?;
-    let done = run(layout, &steps, None, relabel)?;
+    for step in &steps {
+        if let Step::SwitchCurrent(target) = step {
+            recorded(layout, auth, target)?;
+        }
+    }
+    let done = run(layout, &steps, None, auth, relabel)?;
     let version = read_installed(layout)?
         .current
         .unwrap_or_else(|| Version::new(0, 0, 0));

@@ -126,8 +126,11 @@ fn leftovers_of_an_earlier_attempt_do_not_get_in_the_way() {
 #[test]
 fn a_second_update_at_the_same_time_is_turned_away() {
     let sandbox = Sandbox::new();
-    std::fs::create_dir_all(sandbox.layout.releases_dir()).expect("dirs");
-    let held = std::fs::File::create(sandbox.layout.lock_file()).expect("lock file");
+    sandbox
+        .install(&build(&Recipe::new("0.0.1")))
+        .expect("the first install makes the lock");
+    // Opened only for reading: `flock` still works on it, which is why the file is out of reach.
+    let held = std::fs::File::open(sandbox.layout.lock_file()).expect("lock file");
     held.lock().expect("lock");
     let err = sandbox
         .install(&build(&Recipe::new("0.1.0")))

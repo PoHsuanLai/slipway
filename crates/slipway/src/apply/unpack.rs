@@ -2,13 +2,18 @@
 //!
 //! Only regular files and plain directories are ever created, each file is written to a fresh
 //! path (never through a link), hashed as it is written, and given the mode the release lists.
+//!
+//! The new tree is private while it is built: its top folder is `0700` and every file starts as `0600`,
+//! whatever the umask. Nothing but root can open anything in it until [`open_tree`] makes it public,
+//! after the release record is in place. A process of the person cannot keep a handle on a file that is
+//! later checked, or swap a folder for a link.
 
 use super::error::ApplyError;
-use crate::fsutil::{open_dirs, sync_tree};
+use crate::fsutil::{create_dirs, open_dirs, sync_tree};
 use slipway_core::{Audit, EntryKind, Hasher, Release};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, DirBuilder, OpenOptions};
 use std::io::{Read, Write};
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 use tar::EntryType;
 
@@ -29,15 +34,17 @@ fn kind_of(kind: EntryType) -> EntryKind {
     }
 }
 
-/// Unpacks the bundle at `bundle` into the new directory `dest`, which must not exist. On any
-/// refusal the caller removes `dest`.
-pub fn unpack(bundle: &Path, release: &Release, dest: &Path) -> Result<(), ApplyError> {
-    let open = ApplyError::io("opening the bundle");
-    let decoder = zstd::stream::read::Decoder::new(File::open(bundle).map_err(open)?)
-        .map_err(ApplyError::io("reading the bundle"))?;
+/// Unpacks the (already verified) bundle read from `bundle` into the new directory `dest`, which must
+/// not exist. On any refusal the caller removes `dest`. The tree is left private; see [`open_tree`].
+pub fn unpack<R: Read>(bundle: R, release: &Release, dest: &Path) -> Result<(), ApplyError> {
+    let decoder =
+        zstd::stream::read::Decoder::new(bundle).map_err(ApplyError::io("reading the bundle"))?;
     let mut archive = tar::Archive::new(decoder);
     let mut audit = Audit::new(release);
-    fs::create_dir(dest).map_err(ApplyError::io("creating the new release folder"))?;
+    DirBuilder::new()
+        .mode(0o700)
+        .create(dest)
+        .map_err(ApplyError::io("creating the new release folder"))?;
     let mut written = 0u64;
     let entries = archive
         .entries()
@@ -62,6 +69,11 @@ pub fn unpack(bundle: &Path, release: &Release, dest: &Path) -> Result<(), Apply
         }
     }
     audit.finish()?;
+    Ok(())
+}
+
+/// Makes a finished tree public: every folder `0755` (the top one last) and everything flushed to disk.
+pub fn open_tree(dest: &Path) -> Result<(), ApplyError> {
     open_dirs(dest).map_err(ApplyError::io("opening the new release's folders"))?;
     sync_tree(dest).map_err(ApplyError::io("flushing the new release"))
 }
@@ -78,12 +90,13 @@ fn write_file<R: Read>(
     let listed = audit.listing(raw)?;
     let target = dest.join(listed.path.as_path());
     if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent)
+        create_dirs(parent, 0o755)
             .map_err(ApplyError::io("creating a folder in the new release"))?;
     }
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)
+        .mode(0o600)
         .open(&target)
         .map_err(ApplyError::io("creating a file in the new release"))?;
     let mut hasher = Hasher::new();

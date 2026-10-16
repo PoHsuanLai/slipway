@@ -66,7 +66,7 @@ file does not exist. No key: nothing is installed and the person is told so. The
 <root>/releases/<version>.partial/    an unpack in progress
 <root>/current  -> releases/<version>
 <root>/previous -> releases/<version>
-<root>/lock
+<root>/.private/                      0700, root only: the update lock and the private copy of a bundle
 ```
 
 The root defaults to `/opt/quire`. `slipway-core::plan_install` turns (current, previous, releases,
@@ -75,7 +75,10 @@ target) into ordered steps: `Unpack`, `Publish` (rename `.partial` to the versio
 tree is complete and flushed before the single `rename(2)` that changes what runs (`current.new` is
 made, then renamed over `current`). A target not newer than `current` is refused; a rollback is the
 same switch back with `current` and `previous` exchanged, so it can be undone. At most current,
-previous and one unswitched newer release stay on disk.
+previous and one unswitched newer release stay on disk. A step after the switch that fails (the
+links or the system files cannot be updated) puts `current` and `previous` back where they were and
+re-syncs for the release that is current again; the error says whether that worked. If it did not,
+the daemon still writes the health marker for whatever is current (section 7).
 
 Exports: after the switch each `[[export]]` link is made to point at `<root>/current/<target>`. A
 link is created when missing, replaced only when it already points into the root, left alone and
@@ -118,13 +121,29 @@ is called); every other key in it is ignored.
 
 The daemon never writes under the root. It downloads into `$XDG_CACHE_HOME/slipway/<version>/`,
 checks the signature of `release.toml` and then the bundle's size and digest, and only then asks
-`slipway-apply` to install the directory. The helper trusts nothing but the path: it reads the files
-once into memory, checks the signature with the key on this computer, the bundle digest, and the
-digest of every file as it is written (so changing the staged bundle between the checks gains
-nothing). It takes `<root>/lock`, unpacks into `<version>.partial` (regular files and plain
-directories only, each created fresh, nothing through a link), flushes, then runs the plan. Its root
-and key come from `/etc/slipway/config.toml`, never from the caller. Exit codes: 0 done, 1 failed,
-2 usage, 3 refused (not newer / nothing to go back to), 4 did not verify, 5 busy, 6 no key.
+`slipway-apply` to install the directory. The helper trusts nothing but the path, and not even that:
+
+- Its first instruction sets umask 022; it then moves to `/`, switches off core dumps and lifts the
+  limits the caller may have lowered (`pkexec` clears the environment, not these). Everything it
+  creates also gets its mode explicitly, so a hostile umask changes nothing.
+- It takes the lock in `<root>/.private` (a `0700` folder; `flock` works on a file opened for
+  reading, so a lock in a folder others can enter could be held by anybody).
+- Every file the caller names is opened once with `O_NOFOLLOW | O_NONBLOCK` and read from that handle
+  only if it is a regular file, so a pipe or a link cannot hang or redirect the helper.
+- It checks the signature with the key on this computer, then copies the bundle once into a private
+  file that has no name, hashing it as it copies (at most the listed size plus one byte), and unpacks
+  from that copy. Changing the staged bundle after the check gains nothing. It refuses to start when
+  the file system has less than four times the bundle's size free.
+- It unpacks into `<version>.partial`, which is `0700` with files `0600` until it is whole (regular
+  files and plain directories only, each created fresh, nothing through a link, each file hashed as
+  it is written), keeps `.slipway/release.toml` and its signature (`0644`, root-owned), makes the
+  folders `0755`, flushes, then runs the plan.
+- Whatever it later reads back from a release folder (the kept record, a system file's contents) is
+  checked again: the record against the signature with the key, a system file against the digest in
+  the signed description, from a handle the helper opened itself.
+
+Its root and key come from `/etc/slipway/config.toml`, never from the caller. Exit codes: 0 done,
+1 failed, 2 usage, 3 refused (not newer / nothing to go back to), 4 did not verify, 5 busy, 6 no key.
 
 ## 6. The session service
 

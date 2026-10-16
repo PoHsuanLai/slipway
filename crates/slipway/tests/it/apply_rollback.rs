@@ -1,4 +1,4 @@
-use crate::support::{Recipe, Sandbox, build, read, v};
+use crate::support::{Accept, Recipe, Sandbox, build, read, v};
 use slipway::apply::{ApplyError, ExitCode, rollback};
 
 #[test]
@@ -15,7 +15,7 @@ fn rollback_swaps_back_and_forth_and_moves_the_links() {
         "casement two"
     );
 
-    let back = rollback(&sandbox.layout).expect("rollback");
+    let back = rollback(&sandbox.layout, &Accept).expect("rollback");
     assert_eq!(back.version, v("0.1.0"));
     assert_eq!(sandbox.current(), Some(v("0.1.0")));
     assert_eq!(sandbox.previous(), Some(v("0.2.0")));
@@ -28,7 +28,7 @@ fn rollback_swaps_back_and_forth_and_moves_the_links() {
         "[Desktop Entry]"
     );
 
-    let forward = rollback(&sandbox.layout).expect("rollback again");
+    let forward = rollback(&sandbox.layout, &Accept).expect("rollback again");
     assert_eq!(forward.version, v("0.2.0"));
     assert_eq!(
         read(&sandbox.layout.current().join("bin/casement")),
@@ -39,12 +39,12 @@ fn rollback_swaps_back_and_forth_and_moves_the_links() {
 #[test]
 fn rollback_with_nothing_before_is_refused() {
     let sandbox = Sandbox::new();
-    let none = rollback(&sandbox.layout).expect_err("nothing installed");
+    let none = rollback(&sandbox.layout, &Accept).expect_err("nothing installed");
     assert!(matches!(none, ApplyError::Plan(_)));
     sandbox
         .install(&build(&Recipe::new("0.1.0")))
         .expect("install");
-    let only = rollback(&sandbox.layout).expect_err("no previous");
+    let only = rollback(&sandbox.layout, &Accept).expect_err("no previous");
     assert_eq!(only.exit_code(), ExitCode::Refused);
     assert_eq!(sandbox.current(), Some(v("0.1.0")));
 }
@@ -68,7 +68,7 @@ fn rollback_moves_the_exports_of_the_release_it_returns_to() {
     );
     assert!(std::fs::symlink_metadata(sandbox.link("/usr/local/bin/casement")).is_err());
 
-    rollback(&sandbox.layout).expect("rollback");
+    rollback(&sandbox.layout, &Accept).expect("rollback");
     assert!(sandbox.link("/usr/local/bin/casement").exists());
     assert!(
         std::fs::symlink_metadata(sandbox.link("/usr/share/wayland-sessions/quire.desktop"))

@@ -121,7 +121,7 @@ fn a_rollback_puts_the_earlier_system_files_back() {
     assert_eq!(read(&at), "v2");
     assert_eq!(read(&pam), "pam");
 
-    let back = rollback(&sandbox.layout).expect("rollback");
+    let back = rollback(&sandbox.layout, &Accept).expect("rollback");
     assert_eq!(back.version, v("0.1.0"));
     assert_eq!(read(&at), "v1");
     assert!(

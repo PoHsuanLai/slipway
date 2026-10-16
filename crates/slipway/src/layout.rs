@@ -5,7 +5,8 @@
 //! <root>/releases/<version>.partial/ an unpack in progress
 //! <root>/current  -> releases/<version>
 //! <root>/previous -> releases/<version>
-//! <root>/lock                        held while installing
+//! <root>/.private/                   0700, root only: the lock and the private copy of a bundle
+//! <root>/.private/lock               held while installing
 //! ```
 //!
 //! Both the root and the base the export links live under (`/` on a real system) are plain fields,
@@ -22,6 +23,9 @@ pub const RECORD_DIR: &str = ".slipway";
 pub const RECORD_RELEASE: &str = "release.toml";
 /// Its signature.
 pub const RECORD_SIGNATURE: &str = "release.toml.minisig";
+/// The folder under the root that only the privileged helper can open: the lock, and the private
+/// copy of a bundle while it is unpacked.
+pub const PRIVATE_DIR: &str = ".private";
 
 /// Paths under an install root.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -66,9 +70,15 @@ impl Layout {
         self.root.join("previous")
     }
 
-    /// The lock file.
+    /// The folder only root can open (mode 0700). Nothing a person can name is read from it.
+    pub fn private_dir(&self) -> PathBuf {
+        self.root.join(PRIVATE_DIR)
+    }
+
+    /// The lock file. It lives in the private folder: `flock` works on a file opened for reading, so a
+    /// lock in a folder others can enter could be held by anybody.
     pub fn lock_file(&self) -> PathBuf {
-        self.root.join("lock")
+        self.private_dir().join("lock")
     }
 
     /// The kept `release.toml` of an installed release.
@@ -76,6 +86,13 @@ impl Layout {
         self.release_dir(version)
             .join(RECORD_DIR)
             .join(RECORD_RELEASE)
+    }
+
+    /// The signature of the kept `release.toml` of an installed release.
+    pub fn record_signature(&self, version: &Version) -> PathBuf {
+        self.release_dir(version)
+            .join(RECORD_DIR)
+            .join(RECORD_SIGNATURE)
     }
 
     /// Where an absolute export link path is on this system.

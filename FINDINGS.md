@@ -50,8 +50,8 @@ Departures from the plan, standing facts and open items. An entry names the cond
     "try again" button.
 13. **Bundle folders are `0755`.** The tar's folder modes were ignored and folders got the helper's umask,
     so a restrictive umask under pkexec would have made `/opt/quire` unreadable to the person. Folders the
-    unpack makes, and `<root>` and `<root>/releases` when they are new, are now set to `0755`. The effect of
-    a restrictive umask itself is not tested (setting one needs `unsafe`); the tests check the resulting modes.
+    unpack makes, and `<root>` and `<root>/releases` when they are new, are now set to `0755`. Since
+    decision 18 the helper also sets its own umask, and a test runs the install under umask 0 and 077.
 14. **An export points at a file.** A link to a folder in the bundle was accepted; the pipeline never makes
     one and a folder link is not needed, so it is refused (`ExportTargetMissing`).
 
@@ -66,6 +66,20 @@ Departures from the plan, standing facts and open items. An entry names the cond
     system files where SELinux is in use; `scripts/install.sh` adds the `semanage fcontext` rules.
     Not run on a real SELinux computer: the first Fedora install should check `ls -Z /opt/quire/current/bin`
     and that `keycap.service` starts under the enforcing policy.
+
+18. **The helper does not trust what the caller can touch (audit ROOT-01, ROOT-05, ROOT-06).** It sets
+    umask 022 first (via `rustix`, no `unsafe`); makes the new tree `0700`/`0600` until whole; keeps
+    `.slipway/release.toml` root-owned `0644`; checks the kept record's signature again whenever it reads
+    it (`recorded()`), so an on-disk record is trusted only as far as the key vouches for it; re-hashes a
+    system file against the signed digest at the moment it is copied; keeps the lock in `<root>/.private`;
+    opens named files without following links or waiting on pipes; and copies the bundle once into an
+    unnamed private file while hashing it. A rollback now needs the release key too (it verifies the kept
+    record of the release it returns to before moving anything). `StagedError::BundleSize` no longer
+    says how big the named file was (it leaked the size of any file root can read).
+    Deferred: a per-file `size` in `[[file]]` (ROOT-06's other half) changes the frozen release format and
+    needs `release.py` and `pack.sh` to follow; with the digest taken on a private copy the stream can no
+    longer be swapped for a different one, so the remaining risk is a signed bundle that is itself huge.
+19. **A step after the switch that fails puts the earlier release back (ROOT-11).** See ARCHITECTURE s.4.
 
 ## Open questions
 
