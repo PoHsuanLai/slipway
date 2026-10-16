@@ -2,7 +2,7 @@
 # Install slipway's system pieces: the privileged helpers, their polkit actions, the user unit, the bus
 # activation file, the system settings file and, when given, the release key.
 #
-#   scripts/install.sh [--prefix DIR] [--destdir DIR] [--sysconfdir DIR] [--bin-dir DIR] [--no-build]
+#   scripts/install.sh [--prefix DIR] [--destdir DIR] [--sysconfdir DIR] [--bin-dir DIR] [--no-build | --build-only]
 #                      [--root DIR] [--pubkey FILE]
 #
 # --prefix    where the software goes (default /usr; the environment variable PREFIX also sets it)
@@ -13,14 +13,20 @@
 # --bin-dir   install the already built slipway-apply, slipway-rollback and slipway-health found in DIR
 #             instead of building them
 # --no-build  install from target/release (or $CARGO_TARGET_DIR/release) without building first
+# --build-only build the helpers as yourself, then stop and say how to place them as the administrator
 #
 # Building and installing are two steps with two owners. The build runs as the person (it compiles
 # every dependency, and none of that may run as root); the install is the step that needs root, and it
 # only places finished files: with --bin-dir or --no-build it never runs cargo. Asked to build while
 # running as root the script refuses and says what to run instead:
 #
-#   cargo build --release --locked -p slipway-root       (as yourself, in this folder)
+#   scripts/install.sh --build-only                      (as yourself)
 #   sudo sh -c 'umask 022 && scripts/install.sh --bin-dir target/release --pubkey FILE'
+#
+# The build never links with a linker the person has to install: cargo runs from / with
+# `--manifest-path`, so a source folder's own .cargo/config.toml (which may name clang or mold for the
+# people who work on the code) is not read, and the toolchain pinned in rust-toolchain.toml is passed on
+# through RUSTUP_TOOLCHAIN. It needs git and cargo, and no RUSTFLAGS.
 #
 # --root      the install root the desktop lives under (default /opt/quire); the unit starts
 #             ROOT/current/bin/slipway and the system settings name it
@@ -70,6 +76,7 @@ prefix=${PREFIX:-/usr}
 destdir=${DESTDIR:-}
 bin_dir=
 build=yes
+build_only=no
 root=/opt/quire
 pubkey=
 sysconfdir=${SYSCONFDIR:-}
@@ -89,6 +96,7 @@ while [ $# -gt 0 ]; do
         --bin-dir) bin_dir=${2:?--bin-dir needs a directory}; shift 2 ;;
         --bin-dir=*) bin_dir=${1#--bin-dir=}; shift ;;
         --no-build) build=no; shift ;;
+        --build-only) build_only=yes; shift ;;
         --root) root=${2:?--root needs a directory}; shift 2 ;;
         --root=*) root=${1#--root=}; shift ;;
         --pubkey) pubkey=${2:?--pubkey needs a file}; shift 2 ;;
@@ -201,20 +209,72 @@ put() {
 if [ -n "$bin_dir" ]; then
     built=$bin_dir
 else
+    # A relative CARGO_TARGET_DIR means the folder the script was started from, which the build below
+    # (run from /) would not see; make it absolute once, for the build and for the lookup.
+    target_dir=${CARGO_TARGET_DIR:-$here/target}
+    case $target_dir in
+        /*) ;;
+        *) target_dir=$(pwd)/$target_dir ;;
+    esac
     if [ "$build" = yes ]; then
         if [ "$(id -u)" = 0 ]; then
             echo "install.sh: not building as root: compiling the dependencies must not run with administrator rights." >&2
-            echo "install.sh: build as yourself:  cargo build --release --locked -p slipway-root" >&2
-            echo "install.sh: then install:       sudo sh -c 'umask 022 && $0 --bin-dir target/release${pubkey:+ --pubkey $pubkey}'" >&2
+            echo "install.sh: build as yourself:  scripts/install.sh --build-only" >&2
+            echo "install.sh: then install:       sudo sh -c 'umask 022 && $0 --bin-dir $target_dir/release${pubkey:+ --pubkey $pubkey}'" >&2
             exit 1
         fi
-        (cd "$here" && cargo build --release --locked -p slipway-root)
+        for tool in git cargo; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+                echo "install.sh: $tool is needed to build the helpers; install $tool and run this again" >&2
+                exit 1
+            fi
+        done
+        # Linked by this computer's own linker, never one the person has to install. Cargo reads a
+        # source folder's .cargo/config.toml (and rustup its toolchain file) from the folder it runs in,
+        # so the build runs from / with the manifest named, the pinned toolchain passed on, and the one
+        # setting an install wants from a config file given again. No RUSTFLAGS.
+        toolchain=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' "$here/rust-toolchain.toml" 2>/dev/null)
+        (
+            cd / &&
+                CARGO_TARGET_DIR=$target_dir &&
+                export CARGO_TARGET_DIR &&
+                if [ -n "$toolchain" ] && command -v rustup >/dev/null 2>&1; then
+                    # rustup 1.28 and later no longer fetches the toolchain RUSTUP_TOOLCHAIN names.
+                    rustup run "$toolchain" true >/dev/null 2>&1 ||
+                        rustup toolchain install "$toolchain" --profile minimal
+                    RUSTUP_TOOLCHAIN=$toolchain
+                    export RUSTUP_TOOLCHAIN
+                fi &&
+                cargo build --release --locked --manifest-path "$here/Cargo.toml" \
+                    --config net.git-fetch-with-cli=true -p slipway-root
+        )
     fi
-    built=${CARGO_TARGET_DIR:-$here/target}/release
+    built=$target_dir/release
+fi
+if [ "$build_only" = yes ]; then
+    echo "Built in $built. Now place it as the administrator:"
+    echo "  sudo sh -c 'umask 022 && $0 --bin-dir $built${pubkey:+ --pubkey $pubkey}'"
+    exit 0
 fi
 for helper in slipway-apply slipway-rollback slipway-health; do
     if [ ! -x "$built/$helper" ]; then
         echo "install.sh: $built/$helper is not there; build first or point --bin-dir at it" >&2
+        exit 1
+    fi
+done
+
+# Placing files needs the rights to write where they go (the administrator's for /usr and /etc). Say so in
+# plain words rather than let the first `install` fail with a bare error.
+nearest_existing() {
+    d=$1
+    while [ ! -e "$d" ] && [ "$d" != / ]; do d=$(dirname "$d"); done
+    echo "$d"
+}
+for target in "$destdir$prefix/libexec" "$destdir$sysconfdir"; do
+    where=$(nearest_existing "$target")
+    if [ ! -w "$where" ]; then
+        echo "install.sh: placing the files in $where needs administrator rights." >&2
+        echo "install.sh: run:  sudo sh -c 'umask 022 && $0 --bin-dir $built${pubkey:+ --pubkey $pubkey}'" >&2
         exit 1
     fi
 done
