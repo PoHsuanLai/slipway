@@ -43,7 +43,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"
 # process is held by the bus daemon's descriptor and judged against the desktop's root-owned table. The
 # service runs on tokio, so zbus's default executor is turned off and peephole's tokio feature on. The `fake`
 # feature (a test seam that lets a test say who a sender is) is enabled only by the tests.
-peephole-bus = { git = "https://github.com/PoHsuanLai/peephole", tag = "v0.1.0", default-features = false, features = ["tokio", "desktop"] }
+peephole-bus = { git = "https://github.com/PoHsuanLai/peephole", tag = "v0.1.1", default-features = false, features = ["tokio", "desktop"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "env-filter"] }
 proptest = "1"

@@ -393,6 +393,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd417de3d1d015fc3bfd2b1ea46dfc7bab72ef86f1cc7cc9c78e728b34a6d1fd"
 
 [[package]]
+name = "futures-timer"
+version = "3.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af43fadb8a98512d547e37b4e92e0ced13e205c061b87b4623eff01d918d6968"
+
+[[package]]
 name = "futures-util"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -718,6 +724,39 @@ name = "parking"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f38d5652c16fde515bb1ecef450ab0f6a219d619a7274976324d5e377f7dceba"
+
+[[package]]
+name = "peephole"
+version = "0.1.1"
+source = "git+https://github.com/PoHsuanLai/peephole?tag=v0.1.1#e1b1b6adaff180516f198cf5435e85e4dc36e971"
+dependencies = [
+ "peephole-core",
+ "rustix",
+ "thiserror",
+]
+
+[[package]]
+name = "peephole-bus"
+version = "0.1.1"
+source = "git+https://github.com/PoHsuanLai/peephole?tag=v0.1.1#e1b1b6adaff180516f198cf5435e85e4dc36e971"
+dependencies = [
+ "futures-timer",
+ "peephole",
+ "peephole-core",
+ "thiserror",
+ "tokio",
+ "zbus",
+]
+
+[[package]]
+name = "peephole-core"
+version = "0.1.1"
+source = "git+https://github.com/PoHsuanLai/peephole?tag=v0.1.1#e1b1b6adaff180516f198cf5435e85e4dc36e971"
+dependencies = [
+ "serde",
+ "thiserror",
+ "toml 1.1.8+spec-1.1.0",
+]
 
 [[package]]
 name = "percent-encoding"
@@ -1052,6 +1091,7 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 name = "slipway"
 version = "0.1.0"
 dependencies = [
+ "peephole-bus",
  "semver",
  "serde",
  "serde_json",
@@ -1062,7 +1102,7 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
- "toml",
+ "toml 0.9.12+spec-1.1.0",
  "tracing",
  "tracing-subscriber",
  "ureq",
@@ -1082,7 +1122,7 @@ dependencies = [
  "sha2",
  "thiserror",
  "time",
- "toml",
+ "toml 0.9.12+spec-1.1.0",
 ]
 
 [[package]]
@@ -1095,7 +1135,7 @@ dependencies = [
  "tar",
  "tempfile",
  "thiserror",
- "toml",
+ "toml 0.9.12+spec-1.1.0",
  "zstd",
 ]
 
@@ -1294,6 +1334,21 @@ dependencies = [
  "toml_parser",
  "toml_writer",
  "winnow 0.7.15",
+]
+
+[[package]]
+name = "toml"
+version = "1.1.8+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20489e00e4d8741d6be680764cc12e270655e375a20d1011e844a9c3379e678d"
+dependencies = [
+ "indexmap",
+ "serde_core",
+ "serde_spanned",
+ "toml_datetime 1.1.2+spec-1.1.0",
+ "toml_parser",
+ "toml_writer",
+ "winnow 1.0.4",
 ]
 
 [[package]]
