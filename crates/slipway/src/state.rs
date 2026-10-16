@@ -64,6 +64,14 @@ impl StateStore {
             .unwrap_or_default()
     }
 
+    /// [`StateStore::update`] for a change nobody can act on if it fails: the failure is logged, not
+    /// dropped, so a marker that did not get written leaves a trace.
+    pub fn remember(&self, change: impl FnOnce(&mut UserState)) {
+        if let Err(e) = self.update(change) {
+            tracing::warn!("could not write {}: {e}", self.path.display());
+        }
+    }
+
     /// Reads, changes and writes the state in one go.
     pub fn update(&self, change: impl FnOnce(&mut UserState)) -> io::Result<UserState> {
         let mut state = self.load();

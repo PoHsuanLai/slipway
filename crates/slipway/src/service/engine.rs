@@ -304,16 +304,24 @@ impl Engine {
         .await;
         self.change(|s| s.phase = Phase::Installing).await;
         let (engine, staged) = (Arc::clone(self), dir.clone());
-        let report = tokio::task::spawn_blocking(move || engine.ctx.elevate.install(&staged))
+        let outcome = tokio::task::spawn_blocking(move || engine.ctx.elevate.install(&staged))
             .await
-            .map_err(|_| Problem::Other)?
-            .map_err(|failure| {
+            .map_err(|_| Problem::Other)?;
+        let report = match outcome {
+            Ok(report) => report,
+            Err(failure) => {
                 tracing::warn!("installing failed: {failure}");
-                Problem::from_apply(&failure)
-            })?;
+                // A helper that failed after it switched, and could not switch back, leaves this release
+                // current: it must still be watched, or it would run unmonitored.
+                if self.installed_version().as_ref() == Some(&version) {
+                    self.remember_install(&version);
+                    self.change(|s| s.current = version.to_string()).await;
+                }
+                return Err(Problem::from_apply(&failure));
+            }
+        };
         report.log();
-        let pending = Pending::installed(version.clone(), self.ctx.login.clone());
-        let _ = self.ctx.store.update(|s| s.pending = Some(pending));
+        self.remember_install(&version);
         let _ = remove_tree(&dir);
         if !report.conflicts.is_empty() {
             self.tell(notify::LEFT_ALONE_TEXT).await;
@@ -329,6 +337,12 @@ impl Engine {
         })
         .await;
         Ok(())
+    }
+
+    /// Leaves the marker the health check looks for: `version` was installed in this login.
+    fn remember_install(&self, version: &Version) {
+        let pending = Pending::installed(version.clone(), self.ctx.login.clone());
+        self.ctx.store.remember(|s| s.pending = Some(pending));
     }
 
     /// Makes sure `dir` holds the verified release: reuses it if it already verifies, else downloads.
@@ -396,7 +410,7 @@ impl Engine {
         if !report.conflicts.is_empty() {
             self.tell(notify::LEFT_ALONE_TEXT).await;
         }
-        let _ = self.ctx.store.update(|s| {
+        self.ctx.store.remember(|s| {
             s.pending = None;
             if let Some(left) = left {
                 s.refuse(left);

@@ -181,5 +181,9 @@ fn a_failed_rollback_is_not_reported_as_restored() {
         store.load().pending.is_some(),
         "the marker stays so the next start tries again"
     );
-    assert_eq!(store.load().refused, None, "nothing was rolled back");
+    assert_eq!(
+        store.load().refused,
+        Some(v("0.2.0")),
+        "the release is not offered again meanwhile"
+    );
 }

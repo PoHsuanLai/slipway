@@ -170,6 +170,15 @@ impl Elevate for NoHelper {
 }
 
 fn engine_serving(sandbox: &Sandbox, version: &str, store: &StateStore) -> Arc<Engine> {
+    engine_with(sandbox, version, store, Arc::new(NoHelper))
+}
+
+fn engine_with(
+    sandbox: &Sandbox,
+    version: &str,
+    store: &StateStore,
+    elevate: Arc<dyn Elevate>,
+) -> Arc<Engine> {
     let (memory, source, _) = served(version, None);
     Engine::new(Context {
         config: Config::default(),
@@ -179,7 +188,7 @@ fn engine_serving(sandbox: &Sandbox, version: &str, store: &StateStore) -> Arc<E
         source,
         fetch: Arc::new(memory),
         anchor: Ok(Arc::new(Accept)),
-        elevate: Arc::new(NoHelper),
+        elevate,
         login: LoginSession::default(),
         seed: 0,
     })
@@ -187,7 +196,12 @@ fn engine_serving(sandbox: &Sandbox, version: &str, store: &StateStore) -> Arc<E
 
 /// Runs one check to its end and returns the status it left.
 async fn checked(engine: &Arc<Engine>) -> Status {
-    engine.begin(Job::Check).await.expect("the check begins");
+    ran(engine, Job::Check).await
+}
+
+/// Runs `job` to its end and returns the status it left.
+async fn ran(engine: &Arc<Engine>, job: Job) -> Status {
+    engine.begin(job).await.expect("the job begins");
     for _ in 0..500 {
         if !engine.snapshot().phase.is_busy() {
             break;
@@ -229,4 +243,49 @@ fn a_rolled_back_version_is_not_offered_again_until_a_newer_one_appears() {
         assert_eq!(status.phase, Phase::Available, "{status:?}");
         assert_eq!(status.available, "0.2.0");
     });
+}
+
+/// A helper that installs for real in the sandbox and then reports a failure, as one does that fails
+/// after the switch and cannot switch back.
+struct SwitchesThenFails {
+    layout: slipway::Layout,
+}
+
+impl Elevate for SwitchesThenFails {
+    fn install(&self, staged: &Path) -> Result<Report, ApplyFailure> {
+        slipway::apply::install(&self.layout, staged, &Accept).expect("the install itself works");
+        Err(ApplyFailure {
+            code: Some(1),
+            detail: "a system file could not be placed".into(),
+        })
+    }
+
+    fn rollback(&self) -> Result<Report, ApplyFailure> {
+        Ok(Report::default())
+    }
+}
+
+#[test]
+fn an_install_that_failed_after_the_switch_is_still_watched_by_the_health_check() {
+    let sandbox = Sandbox::new();
+    sandbox
+        .install(&build(&Recipe::new("0.1.0")))
+        .expect("install");
+    let store = StateStore::new(sandbox.tmp.path().join("state.toml"));
+    let helper: Arc<dyn Elevate> = Arc::new(SwitchesThenFails {
+        layout: sandbox.layout.clone(),
+    });
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("runtime");
+    runtime.block_on(async {
+        let engine = engine_with(&sandbox, "0.2.0", &store, helper);
+        let status = ran(&engine, Job::Install).await;
+        assert_eq!(status.phase, Phase::Failed, "{status:?}");
+        assert_eq!(status.current, "0.2.0", "what runs is what the page says");
+    });
+    assert_eq!(sandbox.current(), Some(v("0.2.0")));
+    let pending = store.load().pending.expect("the health marker was written");
+    assert_eq!(pending.version, v("0.2.0"));
 }

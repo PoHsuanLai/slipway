@@ -17,7 +17,8 @@ pub enum Health {
 /// Looks at the marker the last install left and acts on it: moves it on, clears it, or rolls back
 /// (through `elevate`) when the first session on the new release never confirmed. `here` is the
 /// login this start belongs to: a restart inside the login the marker was last set in changes nothing.
-/// A release that is rolled back is remembered as refused, so the next check does not offer it again.
+/// A release that is rolled back is remembered as refused, so the next check does not offer it again;
+/// so is one whose rollback failed (the marker stays, so the next start tries again).
 pub fn on_start(
     layout: &Layout,
     store: &StateStore,
@@ -42,11 +43,11 @@ pub fn on_start(
     match decision {
         Boot::Nothing | Boot::KeepWaiting => Health::Fine,
         Boot::Settle | Boot::GiveUp => {
-            let _ = store.update(|s| s.pending = None);
+            store.remember(|s| s.pending = None);
             Health::Fine
         }
         Boot::MarkFirstLoginSeen => {
-            let _ = store.update(|s| {
+            store.remember(|s| {
                 s.pending = s.pending.take().map(|p| p.first_login_seen(here.clone()));
             });
             Health::Fine
@@ -54,7 +55,7 @@ pub fn on_start(
         Boot::RollBack => match elevate.rollback() {
             Ok(report) => {
                 report.log();
-                let _ = store.update(|s| {
+                store.remember(|s| {
                     if let Some(p) = s.pending.take() {
                         s.refuse(p.version);
                     }
@@ -63,6 +64,13 @@ pub fn on_start(
             }
             Err(failure) => {
                 tracing::warn!("the automatic rollback failed: {failure}");
+                // The release stays marked so the next start tries again, but it is not offered again.
+                store.remember(|s| {
+                    let version = s.pending.as_ref().map(|p| p.version.clone());
+                    if let Some(version) = version {
+                        s.refuse(version);
+                    }
+                });
                 Health::Fine
             }
         },

@@ -179,6 +179,35 @@ fn a_file_the_distribution_ships_in_usr_lib_is_not_replaced_by_a_new_one_in_etc(
     }
 }
 
+#[test]
+fn a_system_file_that_cannot_be_placed_leaves_the_earlier_release_current() {
+    let sandbox = Sandbox::new();
+    sandbox
+        .install(&build(&Recipe::new("0.1.0")))
+        .expect("install");
+    // /etc/udev is a file here, so nothing can be placed below it: the failure comes after the switch.
+    let etc = sandbox.layout.export_base.join("etc");
+    std::fs::create_dir_all(&etc).expect("etc");
+    std::fs::write(etc.join("udev"), "in the way").expect("file");
+
+    let err = sandbox
+        .install(&build(&placing("0.2.0", "v2")))
+        .expect_err("cannot place");
+    match &err {
+        slipway::apply::ApplyError::AfterSwitch { back, .. } => {
+            assert_eq!(*back, slipway::apply::Back::Restored, "{err}");
+        }
+        other => panic!("wrong error: {other}"),
+    }
+    assert_eq!(sandbox.current(), Some(v("0.1.0")));
+    assert_eq!(sandbox.previous(), None);
+    assert_eq!(
+        read(&sandbox.link("/usr/share/wayland-sessions/quire.desktop")),
+        "[Desktop Entry]",
+        "the links follow the release that is current"
+    );
+}
+
 /// Records what it was asked to relabel.
 #[derive(Default)]
 struct Recorder(RefCell<Vec<(Vec<PathBuf>, Reach)>>);
