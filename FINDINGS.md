@@ -328,3 +328,31 @@ helper's reload step (decision 25). Look first at:
 - Not covered by a test: the real table loader in `bootstrap.rs`, and the helper running the real `systemctl` and `udevadm`.
 - Interface ask to the desktop (pa2-desk): the installer places `/etc/quire/desktop-callers.toml` (the existing
   `/etc/quire/*-callers.toml` rule already covers that name), with the `settings` row without a unit described in decision 24.
+
+## Production-audit lane slw (2026-10-17): the root installer, the privileged tree and CI
+
+Written without a compiler (only `bash -n` and a `--destdir` trial of `scripts/install.sh` with stand-in helpers, under
+umask 077 and 022). Closes the desktop lane's asks 1 to 4 (audit ROOT-17):
+
+- **The split already existed** (lane pa-slip2): `slipway-root` is the privileged package, with `slipway-apply`,
+  `slipway-rollback` and `slipway-health` and seven direct dependencies. No further split: a crate of its own for
+  `slipway-apply` alone would duplicate `layout`, `fsutil`, `keys` and `settings` that the other two programs share.
+  Open, and not worth a crate yet: all three programs link the same code, so the rollback program also links the
+  unpack path it never runs.
+- **`scripts/check-boundary.sh`** now checks the root tree with normal and build dependencies and a longer exclusion
+  list (the user-level program, `peephole*`, network client and TLS, bus, async runtime and its parts, `tracing*`), and
+  pins the direct dependencies of `slipway-root` to `slipway-core`, `thiserror`, `semver`, `toml`, `rustix`, `tar`,
+  `zstd`. Adding a direct dependency to the privileged programs is now a change to this script, on purpose.
+- **`scripts/install.sh`** builds from `/` with `--manifest-path`, the pinned toolchain through `RUSTUP_TOOLCHAIN` and
+  `net.git-fetch-with-cli=true` (the lock holds a git dependency), so no `.cargo/config.toml` of the source folder
+  (clang, mold) is read; `--build-only` is the step for the person; as root without `--bin-dir` it still refuses to build;
+  and when the person cannot write where the files go it says so and prints the `sudo` line. Folders and files were
+  already made with `install -d -m755` and `install -m MODE`; a trial under umask 077 gave 755 and 644 everywhere.
+- **CI and `deny.toml`:** `advisories` was already there and ignores nothing. Added `[bans]` and `[sources]` (crates.io and
+  the peephole repository only, as in the sibling repositories) and a `cargo deny check bans sources` step.
+
+Not verified by reading alone: that `cargo tree -e normal,build --depth 1 --prefix none` prints the crate itself as the
+first line and each direct dependency once (the script drops line 1 and sorts uniquely); that no crate in the root tree
+has a name matching the exclusion patterns by accident (the lock file shows none); that `cargo deny check bans sources`
+is green (`multiple-versions` only warns); that `cargo build --manifest-path` from `/` accepts `--locked` together with
+the `--config` flag on the pinned 1.98.1; and the toolchain-install branch of the script, which was not run.

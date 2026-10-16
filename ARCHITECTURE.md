@@ -18,7 +18,10 @@ and can be rolled back. The behaviour follows macOS Software Update.
 `slipway-core` reaches no network, bus, runtime or archive crate. `slipway-root` may read archives (`tar`,
 `zstd`) but reaches no network client, TLS, bus or async runtime (`ureq`, `rustls`, `zbus`, `tokio`):
 the programs that run with administrator rights link only `slipway-core`, `thiserror`, `semver`, `toml`,
-`rustix`, `tar` and `zstd` (and what those bring). `scripts/check-boundary.sh` checks both edges. `slipway`
+`rustix`, `tar` and `zstd` (and what those bring). `scripts/check-boundary.sh` checks both edges: `slipway-core`
+reaches none of the network, bus, runtime or archive crates, and the whole tree of `slipway-root` (normal and build
+dependencies) holds none of the user-level program, the caller-identity library, the network client and TLS, the bus,
+the async runtime and its building blocks, or `tracing`, and its direct dependencies are exactly the seven above. `slipway`
 depends on `slipway-root` (for `Layout`, the file operations, the key loader, the report and the helper's
 exit codes), never the other way. `slipway-core` reads no clock, environment or file: the caller passes
 bytes, times and what it saw on disk.
@@ -46,9 +49,12 @@ report to the type `slipway-root` defines. The three binaries are built with
 
 Install: `scripts/install.sh` only places files. It makes folders with `install -d -m755` and files with
 `install -m MODE` (beside the target, then renamed over it), sets `umask 022` for itself, and refuses to run
-cargo as root: the build is a step of its own, as the person, and the root step takes `--bin-dir` (or
-`--no-build`). `.github/workflows/ci.yml` runs format, clippy, the boundary check, the tests and
-`cargo deny check licenses` and `advisories` (also weekly).
+cargo as root: the build is a step of its own, as the person (`--build-only`), and the root step takes `--bin-dir`
+(or `--no-build`). The build runs from `/` with `--manifest-path` and the toolchain pinned in
+`rust-toolchain.toml`, so it links with the computer's own linker and never needs clang or mold. If the person
+cannot write where the files go, the script says so and prints the `sudo` line. `.github/workflows/ci.yml` runs
+format, clippy, the boundary check, the tests and `cargo deny check licenses`, `advisories`, `bans` and `sources`
+(the `deny` job also weekly); `deny.toml` ignores no advisory and allows crates.io plus the peephole repository.
 
 ## 3. The release format (frozen with the CI lane)
 

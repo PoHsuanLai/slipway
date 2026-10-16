@@ -17,10 +17,10 @@ Keeps a desktop installed from signed, prebuilt release bundles up to date.
 
 Install the system pieces (helper, polkit action, user unit, bus activation file and the system
 settings `/etc/slipway/config.toml` holding the root and the key path) in two steps: build the three
-privileged programs as yourself with `cargo build --release --locked -p slipway-root`, then install them as
+privileged programs as yourself with `scripts/install.sh --build-only`, then install them as
 root with
 `sudo sh -c 'umask 022 && scripts/install.sh --bin-dir target/release --root /opt/quire --pubkey release.pub'`.
-The script never builds as root. `--help` lists the options, and an existing settings file is never
+The script never builds as root, and builds with the computer's own linker (no clang or mold needed). `--help` lists the options, and an existing settings file is never
 overwritten. Your own `~/.config/slipway/config.toml` may only set
 `settings_command` and `name`.
 
