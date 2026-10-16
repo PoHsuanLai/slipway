@@ -7,7 +7,7 @@
 
 use crate::apply::harden::reset_process;
 use crate::apply::{
-    Applied, ApplyError, ExitCode as Code, Selinux, Started, install_with, note_confirmed,
+    Applied, ApplyError, ExitCode as Code, Settling, Started, install_with, note_confirmed,
     note_start, rollback_with,
 };
 use crate::keys::load_key;
@@ -187,7 +187,7 @@ pub fn install_main() -> ExitCode {
     };
     conclude(
         NAME,
-        install_with(&prepared.layout, &dir, &prepared.key, &Selinux::system()),
+        install_with(&prepared.layout, &dir, &prepared.key, &Settling::system()),
     )
 }
 
@@ -214,7 +214,7 @@ pub fn rollback_main() -> ExitCode {
     };
     conclude(
         NAME,
-        rollback_with(&prepared.layout, &prepared.key, &Selinux::system()),
+        rollback_with(&prepared.layout, &prepared.key, &Settling::system()),
     )
 }
 
@@ -253,7 +253,7 @@ pub fn health_main() -> ExitCode {
                 eprintln!("{NAME}: cannot tell which boot this is");
                 return finish(Code::Failed);
             };
-            match note_start(&prepared.layout, &prepared.key, &Selinux::system(), &boot) {
+            match note_start(&prepared.layout, &prepared.key, &Settling::system(), &boot) {
                 Ok(Started::Fine) => finish(Code::Done),
                 Ok(Started::Restored(applied)) => {
                     print!("{}", Report::from(&applied).render());

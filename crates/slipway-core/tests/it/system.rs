@@ -19,7 +19,7 @@ fn doc_placing(dest: &str) -> Doc {
 #[test]
 fn a_system_file_is_accepted_only_when_a_rule_names_it() {
     // (destination, accepted)
-    let table: [(&str, bool); 43] = [
+    let table: [(&str, bool); 51] = [
         // The files the desktop places today.
         ("/etc/pam.d/sill", true),
         ("/etc/udev/rules.d/60-sill-ddc.rules", true),
@@ -30,6 +30,10 @@ fn a_system_file_is_accepted_only_when_a_rule_names_it() {
         ("/etc/modprobe.d/99-palmrest.conf", true),
         ("/usr/lib/systemd/system/keycap.service", true),
         ("/etc/polkit-1/rules.d/keycap.polkit.rules", true),
+        ("/usr/lib/systemd/system/turnstile.socket", true),
+        ("/usr/lib/systemd/system/turnstile.service", true),
+        ("/etc/udev/rules.d/72-turnstile.rules", true),
+        ("/etc/modules-load.d/turnstile.conf", true),
         ("/etc/porter/callers.toml", true),
         ("/etc/porter/inferd-callers.toml", true),
         ("/etc/quire/intentd-callers.toml", true),
@@ -44,6 +48,9 @@ fn a_system_file_is_accepted_only_when_a_rule_names_it() {
         ("/etc/modules-load.d/evil.conf", false),
         ("/etc/modprobe.d/blacklist.conf", false),
         ("/usr/lib/systemd/system/evil.service", false),
+        ("/usr/lib/systemd/system/turnstile.timer", false),
+        ("/usr/lib/systemd/system/turnstile.service.d", false),
+        ("/etc/udev/rules.d/73-turnstile.rules", false),
         ("/etc/porter/other.toml", false),
         ("/etc/quire/policy.toml", false),
         ("/etc/quire/-callers.toml", false),
@@ -52,6 +59,7 @@ fn a_system_file_is_accepted_only_when_a_rule_names_it() {
         ("/etc/passwd", false),
         ("/etc/sudoers.d/quire", false),
         ("/etc/systemd/system/keycap.service", false),
+        ("/etc/systemd/system/turnstile.socket", false),
         ("/usr/lib/udev/rules.d/70-keycap.rules", false),
         ("/usr/bin/keycap", false),
         // Security profiles are never placed by an update (owner, 2026-10-16).

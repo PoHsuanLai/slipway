@@ -1,6 +1,7 @@
 use crate::support::{Accept, Recipe, Sandbox, build, read, v};
 use slipway_root::apply::{
-    Ran, Reach, Relabel, Relabeled, RunProgram, Selinux, install_with, rollback,
+    Change, Command, Ran, Reach, Relabel, Relabeled, RunProgram, Selinux, Settling, commands,
+    install_with, rollback,
 };
 use std::cell::RefCell;
 use std::ffi::OsString;
@@ -141,6 +142,10 @@ fn a_release_listing_a_system_file_no_rule_names_is_refused_whole() {
         "/etc/pam.d/sudo",
         "/etc/udev/rules.d/99-evil.rules",
         "/usr/lib/systemd/system/evil.service",
+        "/usr/lib/systemd/system/turnstile.timer",
+        "/etc/systemd/system/turnstile.socket",
+        "/etc/udev/rules.d/73-turnstile.rules",
+        "/etc/modules-load.d/turnstile.d.conf",
     ];
     for dest in table {
         let sandbox = Sandbox::new();
@@ -362,4 +367,141 @@ fn relabelling_runs_restorecon_only_where_selinux_is_in_use_and_never_fails_an_i
         calls[1].1,
         vec![OsString::from("-F"), OsString::from("/opt/quire")]
     );
+}
+
+const INPUT_FILES: [&str; 4] = [
+    "/usr/lib/systemd/system/turnstile.socket",
+    "/usr/lib/systemd/system/turnstile.service",
+    "/etc/udev/rules.d/72-turnstile.rules",
+    "/etc/modules-load.d/turnstile.conf",
+];
+
+#[test]
+fn each_file_of_the_input_service_is_placed_and_the_system_is_told_once() {
+    let sandbox = Sandbox::new();
+    let bundled: Vec<String> = INPUT_FILES.iter().map(|d| format!("system{d}")).collect();
+    let mut recipe = Recipe::new("0.1.0");
+    for (in_bundle, dest) in bundled.iter().zip(INPUT_FILES) {
+        recipe.listed.push((in_bundle, dest));
+        recipe.system.push(dest);
+    }
+    let fake = Fake::new(vec![
+        ("/usr/bin/systemctl", Ran::Succeeded),
+        ("/usr/bin/udevadm", Ran::Succeeded),
+    ]);
+    let host = Settling::new(slipway_root::apply::NoRelabel, &fake);
+    let applied = install_with(
+        &sandbox.layout,
+        &sandbox.stage(&build(&recipe)),
+        &Accept,
+        &host,
+    )
+    .expect("install");
+    assert!(applied.conflicts.is_empty() && applied.warnings.is_empty());
+    for dest in INPUT_FILES {
+        assert_eq!(read(&sandbox.link(dest)), dest, "{dest}");
+    }
+    let calls: Vec<(String, Vec<String>)> = fake
+        .calls
+        .borrow()
+        .iter()
+        .map(|(program, args)| {
+            (
+                program.display().to_string(),
+                args.iter()
+                    .map(|a| a.to_string_lossy().into_owned())
+                    .collect(),
+            )
+        })
+        .collect();
+    let want = |program: &str, args: &[&str]| {
+        (
+            program.to_owned(),
+            args.iter().map(|a| (*a).to_owned()).collect::<Vec<_>>(),
+        )
+    };
+    assert_eq!(
+        calls,
+        vec![
+            want("/usr/bin/systemctl", &["daemon-reload"]),
+            want("/usr/bin/udevadm", &["control", "--reload-rules"]),
+            want("/usr/bin/udevadm", &["trigger", "--subsystem-match=misc"]),
+            want(
+                "/usr/bin/systemctl",
+                &["enable", "--now", "turnstile.socket"]
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_failing_or_missing_tool_is_a_note_and_never_stops_an_install() {
+    let mut recipe = Recipe::new("0.1.0");
+    let dest = "/usr/lib/systemd/system/turnstile.socket";
+    recipe
+        .listed
+        .push(("system/usr/lib/systemd/system/turnstile.socket", "socket"));
+    recipe.system.push(dest);
+
+    // (what the tools answer, notes expected)
+    let table: [(Vec<(&str, Ran)>, usize); 3] = [
+        (vec![], 0),
+        (vec![("/usr/bin/systemctl", Ran::Failed("no".into()))], 2),
+        (vec![("/bin/systemctl", Ran::Failed("no".into()))], 2),
+    ];
+    for (answers, notes) in table {
+        let sandbox = Sandbox::new();
+        let fake = Fake::new(answers);
+        let host = Settling::new(slipway_root::apply::NoRelabel, &fake);
+        let applied = install_with(
+            &sandbox.layout,
+            &sandbox.stage(&build(&recipe)),
+            &Accept,
+            &host,
+        )
+        .expect("install");
+        assert_eq!(applied.warnings.len(), notes);
+        assert_eq!(read(&sandbox.link(dest)), "socket");
+    }
+}
+
+#[test]
+fn what_the_system_is_told_follows_the_paths_that_changed() {
+    let placed = |p: &str| Change::Placed(p.to_owned());
+    let removed = |p: &str| Change::Removed(p.to_owned());
+    let args = |c: &Command| c.args.join(" ");
+    // (case, changes, the commands as text)
+    let table: Vec<(&str, Vec<Change>, Vec<&str>)> = vec![
+        ("nothing changed", vec![], vec![]),
+        ("a login service", vec![placed("/etc/pam.d/sill")], vec![]),
+        (
+            "a unit",
+            vec![placed("/usr/lib/systemd/system/keycap.service")],
+            vec!["daemon-reload"],
+        ),
+        (
+            "a rule",
+            vec![placed("/etc/udev/rules.d/70-keycap.rules")],
+            vec!["control --reload-rules", "trigger --subsystem-match=misc"],
+        ),
+        (
+            "the socket is placed",
+            vec![placed("/usr/lib/systemd/system/turnstile.socket")],
+            vec!["daemon-reload", "enable --now turnstile.socket"],
+        ),
+        (
+            "the socket is removed: read again, not started",
+            vec![removed("/usr/lib/systemd/system/turnstile.socket")],
+            vec!["daemon-reload"],
+        ),
+        (
+            "the service alone is not started",
+            vec![placed("/usr/lib/systemd/system/turnstile.service")],
+            vec!["daemon-reload"],
+        ),
+    ];
+    for (case, changes, want) in table {
+        let got: Vec<String> = commands(&changes).iter().map(args).collect();
+        assert_eq!(got, want, "{case}");
+    }
 }

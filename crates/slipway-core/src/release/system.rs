@@ -49,7 +49,7 @@ const fn rule(dir: &'static str, name: NameRule) -> SystemRule {
 }
 
 /// Every file a release may place, and nothing else.
-pub const ALLOWED_SYSTEM_FILES: [SystemRule; 13] = [
+pub const ALLOWED_SYSTEM_FILES: [SystemRule; 17] = [
     // The shell's login service.
     rule("/etc/pam.d", NameRule::Exact("sill")),
     // Brightness over the monitor's own bus.
@@ -64,6 +64,18 @@ pub const ALLOWED_SYSTEM_FILES: [SystemRule; 13] = [
         NameRule::Exact("keycap.polkit.rules"),
     ),
     rule("/etc/modules-load.d", NameRule::Exact("keycap.conf")),
+    // The input service that owns the virtual keyboard device: its two units (socket-activated), the
+    // rule that takes the device node away from the person's session, and the module it needs.
+    rule(
+        "/usr/lib/systemd/system",
+        NameRule::Exact("turnstile.socket"),
+    ),
+    rule(
+        "/usr/lib/systemd/system",
+        NameRule::Exact("turnstile.service"),
+    ),
+    rule("/etc/udev/rules.d", NameRule::Exact("72-turnstile.rules")),
+    rule("/etc/modules-load.d", NameRule::Exact("turnstile.conf")),
     // The palm-rejection daemon's device rule and module options.
     rule("/etc/udev/rules.d", NameRule::Exact("70-palmrest.rules")),
     rule("/etc/modprobe.d", NameRule::Exact("99-palmrest.conf")),

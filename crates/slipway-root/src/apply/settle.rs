@@ -1,0 +1,145 @@
+//! Tells the system about system files the helper placed or removed, so they take effect now and not
+//! at the next start.
+//!
+//! A unit file, a device rule and a service that should be listening are three kinds of thing the
+//! system reads once. After `SyncSystem` the helper asks the system to read the unit folder again, to
+//! read the device rules again and apply them to devices already there, and to start the one socket
+//! the desktop's input service listens on. What runs is decided by [`commands`] from the paths alone
+//! (a pure function), by fixed program paths, never by `PATH`; a missing program is not an error and a
+//! failing one is a warning, like the security labels: the files are in place either way.
+
+use super::relabel::{Ran, Reach, Relabel, Relabeled, RunProgram, Selinux, SystemRunner};
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
+
+/// The folder of the unit files the helper may place.
+const UNIT_FOLDER: &str = "/usr/lib/systemd/system/";
+/// The folder of the device rules the helper may place.
+const RULE_FOLDER: &str = "/etc/udev/rules.d/";
+/// The one socket that is started as soon as it is placed: the input service waits behind it.
+const INPUT_SOCKET: &str = "/usr/lib/systemd/system/turnstile.socket";
+
+/// Where the service manager's tool is looked for (a fixed list, so root never depends on `PATH`).
+const MANAGER_TOOLS: &[&str] = &["/usr/bin/systemctl", "/bin/systemctl"];
+/// Where the device manager's tool is looked for.
+const DEVICE_TOOLS: &[&str] = &[
+    "/usr/bin/udevadm",
+    "/usr/sbin/udevadm",
+    "/sbin/udevadm",
+    "/bin/udevadm",
+];
+
+/// One system file the helper placed or removed, by its absolute destination.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Change {
+    /// Written (new, or replacing one an earlier release placed).
+    Placed(String),
+    /// Removed because the release left no longer lists it.
+    Removed(String),
+}
+
+impl Change {
+    fn path(&self) -> &str {
+        match self {
+            Self::Placed(path) | Self::Removed(path) => path,
+        }
+    }
+}
+
+/// A program to run with fixed arguments: the first of `tools` that is installed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Command {
+    /// Where the program may be.
+    pub tools: &'static [&'static str],
+    /// Its arguments.
+    pub args: &'static [&'static str],
+}
+
+const READ_UNITS_AGAIN: Command = Command {
+    tools: MANAGER_TOOLS,
+    args: &["daemon-reload"],
+};
+const READ_RULES_AGAIN: Command = Command {
+    tools: DEVICE_TOOLS,
+    args: &["control", "--reload-rules"],
+};
+const APPLY_RULES: Command = Command {
+    tools: DEVICE_TOOLS,
+    args: &["trigger", "--subsystem-match=misc"],
+};
+const START_INPUT_SOCKET: Command = Command {
+    tools: MANAGER_TOOLS,
+    args: &["enable", "--now", "turnstile.socket"],
+};
+
+/// What to run after `changes`, in order: units are read again before the socket is started, rules are
+/// read again before they are applied.
+pub fn commands(changes: &[Change]) -> Vec<Command> {
+    let touches = |folder: &str| changes.iter().any(|c| c.path().starts_with(folder));
+    let mut out = Vec::new();
+    if touches(UNIT_FOLDER) {
+        out.push(READ_UNITS_AGAIN);
+    }
+    if touches(RULE_FOLDER) {
+        out.push(READ_RULES_AGAIN);
+        out.push(APPLY_RULES);
+    }
+    if changes
+        .iter()
+        .any(|c| matches!(c, Change::Placed(path) if path == INPUT_SOCKET))
+    {
+        out.push(START_INPUT_SOCKET);
+    }
+    out
+}
+
+/// Relabels with `L` and tells the system about system files with the programs `R` runs.
+#[derive(Debug)]
+pub struct Settling<L, R> {
+    relabel: L,
+    runner: R,
+}
+
+impl Settling<Selinux<SystemRunner>, SystemRunner> {
+    /// The real system: SELinux labels where in use, and the real programs.
+    pub fn system() -> Self {
+        Self::new(Selinux::system(), SystemRunner)
+    }
+}
+
+impl<L, R> Settling<L, R> {
+    /// Relabels with `relabel` and runs programs with `runner`.
+    pub fn new(relabel: L, runner: R) -> Self {
+        Self { relabel, runner }
+    }
+}
+
+/// Runs `command` with the first of its tools that exists.
+fn run_first(runner: &impl RunProgram, command: Command) -> Ran {
+    let args: Vec<OsString> = command.args.iter().map(OsString::from).collect();
+    for tool in command.tools {
+        match runner.run(Path::new(tool), &args) {
+            Ran::Missing => {}
+            done => return done,
+        }
+    }
+    Ran::Missing
+}
+
+impl<L: Relabel, R: RunProgram> Relabel for Settling<L, R> {
+    fn relabel(&self, paths: &[PathBuf], reach: Reach) -> Relabeled {
+        self.relabel.relabel(paths, reach)
+    }
+
+    fn settle(&self, changes: &[Change]) -> Vec<String> {
+        commands(changes)
+            .into_iter()
+            .filter_map(|command| match run_first(&self.runner, command) {
+                Ran::Failed(why) => Some(format!(
+                    "the system could not be told about the new system files: {why}"
+                )),
+                Ran::Missing | Ran::Succeeded => None,
+            })
+            .collect()
+    }
+}

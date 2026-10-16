@@ -5,6 +5,7 @@
 //! label from the policy. Where SELinux is not in use, or the tool is not installed, nothing is done and
 //! that is not a problem: labels are best effort and never fail an install.
 
+use super::settle::Change;
 use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -39,10 +40,17 @@ pub enum Reach {
     Paths,
 }
 
-/// Relabels files after the helper placed them.
+/// What the helper asks of the computer after it placed files: their labels, and (for system files)
+/// telling the system about them.
 pub trait Relabel {
     /// Sets the labels of `paths` (and, for [`Reach::Tree`], everything below them).
     fn relabel(&self, paths: &[PathBuf], reach: Reach) -> Relabeled;
+
+    /// Tells the system about system files just placed or removed; returns a plain note for each thing
+    /// that did not work (never an error: the files are in place either way). Nothing by default.
+    fn settle(&self, _changes: &[Change]) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 /// Does nothing: for tests, and for a helper used on a computer without SELinux.

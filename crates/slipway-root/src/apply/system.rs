@@ -10,6 +10,7 @@ use super::error::ApplyError;
 use super::exports::recorded;
 use super::open::{Capped, read_capped};
 use super::relabel::{Reach, Relabel, Relabeled};
+use super::settle::Change;
 use super::synced::Synced;
 use crate::fsutil::write_atomic_mode;
 use crate::layout::Layout;
@@ -104,6 +105,7 @@ pub fn sync_system(
         found.insert(item.path.clone(), seen);
     }
     let mut written: Vec<PathBuf> = Vec::new();
+    let mut changes: Vec<Change> = Vec::new();
     for action in plan_system(&new, &old, &found) {
         match action {
             SystemAction::Place(item) => {
@@ -112,10 +114,12 @@ pub fn sync_system(
                 write_atomic_mode(&at, &bytes, item.mode)
                     .map_err(ApplyError::io(format!("placing {}", item.path)))?;
                 written.push(at);
+                changes.push(Change::Placed(item.path));
             }
             SystemAction::Remove { path } => {
                 fs::remove_file(layout.export_path(&path))
                     .map_err(ApplyError::io(format!("removing {path}")))?;
+                changes.push(Change::Removed(path));
             }
             SystemAction::Keep { .. } => {}
             SystemAction::Conflict { path } => synced.conflicts.push(path),
@@ -128,5 +132,6 @@ pub fn sync_system(
             "the security labels of the system files could not be set: {why}"
         ));
     }
+    synced.warnings.extend(relabel.settle(&changes));
     Ok(synced)
 }
