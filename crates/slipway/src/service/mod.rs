@@ -1,5 +1,6 @@
 //! The session service: the bus object, the update flow behind it, notifications and the schedule.
 
+pub mod caller;
 mod context;
 mod engine;
 mod notify;

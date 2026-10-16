@@ -114,10 +114,16 @@ one is a warning printed by the helper. The program runner is a trait (`RunProgr
 ## 5. Who runs as whom
 
 ```
-person's session                              root (pkexec, polkit action org.quire.slipway.apply)
-slipway run  --download, verify--> cache  --> slipway-apply <staged dir>   (re-verifies everything)
-                                              slipway-apply --rollback
+person's session                          root (pkexec; one polkit action per program)
+slipway run  --download, verify--> cache --> slipway-apply <staged dir>   org.quire.slipway.apply     no password
+slipway rollback (Settings)  ------------> slipway-rollback               org.quire.slipway.rollback  administrator's password
+slipway recover / confirm  --------------> slipway-health recover|confirmed  org.quire.slipway.health  no password
 ```
+
+The three programs are separate files because polkit matches an action to the program's path: the installing
+program cannot go back (a downgrade) at all, and the one that can asks for the administrator's password
+(`auth_admin_keep`). Installing a newer release signed with the project's key stays passwordless. The health
+program is described in section 7.
 
 Settings come from two files. The system file `/etc/slipway/config.toml` (written once by
 `scripts/install.sh`, never overwritten by it) holds `root` and `pubkey_path` and may hold any other
@@ -174,7 +180,13 @@ leaves the state at "installing" for ever.
 Properties (all emit `PropertiesChanged`): `State` (idle, checking, available, downloading, ready,
 installing, installed, failed), `Current`, `Available` ("" when none), `Notes`, `Size` (bytes),
 `Progress` (permille), `LastChecked` (unix seconds, 0 never), `Problem` (plain words).
-Methods: `Check()`, `Install()`, `Rollback()`. Each returns at once, having already moved `State`
+Methods: `Check()`, `Install()`, `Rollback()`. `Rollback()` is answered only for a caller that is the
+shell's unit or the Settings app (`callers` in the system settings, default `sill.service` and
+`org.quire.Settings`; the bus names the caller's process and `/proc/<pid>/cgroup` the unit or app scope it runs in,
+`service/caller.rs`), and the system then asks for the administrator's password. The caller check keeps a stray
+program from putting a password prompt in front of the person; it is not a boundary (a program of the person can
+start itself in a scope of its choosing), the password is. `Install()` is open to any caller on the person's own
+session bus, as before: it can only install a newer release signed by the project. Each returns at once, having already moved `State`
 (so a caller that polls `State` never sees the old value after the call returns), and refuses with
 a plain sentence when work is in progress; the work runs on a spawned task and the blocking parts
 (ureq, the helper) on blocking threads.
@@ -224,7 +236,7 @@ program of the person can ask for. The record is in `<root>/.private/health.toml
 the boot id the helper reads itself, and a start in a boot already counted changes nothing; a release that
 was confirmed, or that was just put back, is never rolled back. The cost: a crash loop inside one boot
 (login screen, log in, crash, again) is not counted; it takes restarts of the computer. Going back by hand
-(section 6 `Rollback()`, or `slipway-apply --rollback` run as an administrator) is for that case.
+(section 6 `Rollback()`, or `slipway-rollback` run by an administrator) is for that case.
 
 At every start of the service `health::on_start` also applies `slipway-core::decide_boot` with the login of
 this start:
@@ -249,7 +261,7 @@ is indistinguishable from a restart, so the check waits for the next boot.
 | Trait | Real | Test |
 | --- | --- | --- |
 | `fetch::Fetch` | `UreqFetch` (HTTPS only) | in-memory map (`tests/it/feed_stage.rs`) |
-| `elevate::Elevate` | `Pkexec` | recording stand-in (`tests/it/health_start.rs`) |
+| `elevate::Elevate` | `Pkexec` (three programs) | recording stand-ins (`tests/it/health_start.rs`, `session_guard.rs`); `sh` scripts for `Pkexec` itself (`elevate_run.rs`) |
 | `slipway_core::Authenticator` | `PublicKey` (minisign) | accept-all and reject-all (`tests/it/support.rs`) |
 | `Layout { root, export_base }` | `/opt/quire` and `/` | a temporary directory for both |
 | `login::here(var, read)` | `login::current()`: the environment and `/proc` | closures |

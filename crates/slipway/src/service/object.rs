@@ -1,8 +1,11 @@
 //! `org.quire.Updates1` on the session bus: the daemon's public face.
 
+use super::caller;
 use super::engine::{Engine, Job};
+use std::path::PathBuf;
 use std::sync::Arc;
-use zbus::{fdo, interface};
+use zbus::message::Header;
+use zbus::{Connection, fdo, interface};
 
 /// The well-known name the daemon owns.
 pub const BUS_NAME: &str = "org.quire.Updates1";
@@ -13,12 +16,21 @@ pub const PATH: &str = "/org/quire/Updates1";
 #[derive(Debug)]
 pub struct Updates {
     engine: Arc<Engine>,
+    /// Who may ask to go back to an earlier version (from the system settings).
+    callers: Vec<String>,
+    /// Where processes are looked at (`/proc`).
+    proc_root: PathBuf,
 }
 
 impl Updates {
-    /// The object for `engine`.
+    /// The object for `engine`; the callers allowed to roll back come from its settings.
     pub fn new(engine: Arc<Engine>) -> Self {
-        Self { engine }
+        let callers = engine.context().config.callers.clone();
+        Self {
+            engine,
+            callers,
+            proc_root: PathBuf::from("/proc"),
+        }
     }
 
     async fn start(&self, job: Job) -> fdo::Result<()> {
@@ -41,8 +53,14 @@ impl Updates {
         self.start(Job::Install).await
     }
 
-    /// Goes back to the previous version; returns at once.
-    async fn rollback(&self) -> fdo::Result<()> {
+    /// Goes back to the previous version; returns at once. Only the shell and Settings may ask (the
+    /// system also asks for the administrator's password before it happens).
+    async fn rollback(
+        &self,
+        #[zbus(header)] header: Header<'_>,
+        #[zbus(connection)] connection: &Connection,
+    ) -> fdo::Result<()> {
+        caller::check(connection, &header, &self.callers, &self.proc_root).await?;
         self.start(Job::Rollback).await
     }
 

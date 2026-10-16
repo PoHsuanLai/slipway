@@ -4,13 +4,14 @@ Departures from the plan, standing facts and open items. An entry names the cond
 
 ## Decisions and departures
 
-1. **Polkit action is allow_active without a password.** `org.quire.slipway.apply` has
-   `allow_active=yes`, `allow_inactive=no`, `allow_any=no`, as specified. This is safe only because
-   `slipway-apply` installs nothing that does not verify against the release key on the computer:
-   anyone at the keyboard can run it, and the only thing it can do is install or roll back to a
-   project-signed release that is newer (or the kept previous one). It cannot be pointed at another root
-   or key (it reads `/etc/slipway/config.toml`, not the caller's configuration). Closes if the owner
-   wants a password for installs: change `allow_active` to `auth_admin_keep`.
+1. **Polkit: installing is allow_active without a password; going back asks for one (owner, 2026-10-16).**
+   `org.quire.slipway.apply` has `allow_active=yes`, `allow_inactive=no`, `allow_any=no`. That is safe only because
+   `slipway-apply` installs nothing that does not verify against the release key on the computer and refuses
+   anything not newer than what runs; it cannot be pointed at another root or key (it reads
+   `/etc/slipway/config.toml`, not the caller's configuration) and, since decision 23, it cannot go back at all.
+   Going back is `slipway-rollback` under `org.quire.slipway.rollback` (`auth_admin_keep`). The health program
+   `slipway-health` has `org.quire.slipway.health` (`yes`), see decision 22. Closes if the owner wants a password
+   for installs: change `allow_active` of the first action to `auth_admin_keep`.
 2. **Test signature is a documentation example.** There is no way to run minisign here, so the real
    signature test (`slipway-core/tests/it/digest_sign.rs`) uses the key and prehashed signature of the
    four bytes `test` copied from minisign-verify 0.2.5's own docs (`src/lib.rs`). Install tests in
@@ -61,7 +62,7 @@ Departures from the plan, standing facts and open items. An entry names the cond
     The user-level systemd and D-Bus service folders were already listed. Each folder is named; a table test
     covers accept and refuse.
 16. **System files (lane distro-slip).** `[[system]]` in `release.toml` and `SyncSystem` (see ARCHITECTURE
-    "System files"). Open question 5 below is the owner's.
+    "System files"). Open question 5 is closed (ROOT-07).
 17. **SELinux labels (lane distro-slip).** `slipway-apply` runs `restorecon` on the root and on placed
     system files where SELinux is in use; `scripts/install.sh` adds the `semanage fcontext` rules.
     Not run on a real SELinux computer: the first Fedora install should check `ls -Z /opt/quire/current/bin`
@@ -100,7 +101,14 @@ Departures from the plan, standing facts and open items. An entry names the cond
     password (the other, on request, will ask for one, decision 23), bounded by "more than two different
     boots" and "only to the kept previous release". Counting boots makes a crash loop inside one boot
     invisible to it. If the owner wants a one-boot loop to recover, the desktop's crash guard has to say
-    so on a channel root can trust (there is none today).
+    so on a channel root can trust (there is none today).23. **Going back asks for the administrator's password (ROOT-04, owner 2026-10-16).** A rollback is a downgrade
+    with no signature check on the way down, so it is its own program and polkit action (ARCHITECTURE s.5), and
+    the service answers `Rollback()` only for the shell's unit and the Settings app (`callers`). Not closed here:
+    "a floor version a rollback may not go below" in root-owned state, which would make a security fix
+    un-roll-back-able even with the password. `Install()` over the bus is not gated (the daemon's `Install()`
+    starting an update nobody clicked is limited to a newer signed release, which is what the daily check would
+    offer anyway). The CLI `slipway rollback` from a terminal is refused by the caller check (it runs in a
+    terminal's scope); the way back there is `pkexec /usr/libexec/slipway-rollback`.
 
 ## Open questions
 

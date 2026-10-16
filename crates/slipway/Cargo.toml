@@ -17,6 +17,10 @@ name = "slipway-apply"
 path = "src/bin/slipway_apply.rs"
 
 [[bin]]
+name = "slipway-rollback"
+path = "src/bin/slipway_rollback.rs"
+
+[[bin]]
 name = "slipway-health"
 path = "src/bin/slipway_health.rs"
 

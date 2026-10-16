@@ -125,3 +125,26 @@ fn the_health_helper_is_asked_in_words_and_answers_in_exit_codes() {
     assert_eq!(failing.recover().expect_err("no key").code, Some(6));
     assert_eq!(failing.confirmed().expect_err("no key").code, Some(6));
 }
+
+#[test]
+fn going_back_runs_its_own_helper_with_no_arguments() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let write = |name: &str, text: &str| {
+        let path = dir.path().join(name);
+        std::fs::write(&path, text).expect("script");
+        path
+    };
+    let helpers = Helpers {
+        install: write("install.sh", "echo 'current 0.0.2'\n"),
+        rollback: write(
+            "rollback.sh",
+            "[ $# -eq 0 ] || { echo 'unexpected arguments' >&2; exit 2; }\necho 'current 0.0.1'\n",
+        ),
+        health: write("health.sh", "exit 0\n"),
+    };
+    let pkexec = Pkexec::with_program(PathBuf::from("sh"), helpers, Duration::from_secs(20));
+    let back = pkexec.rollback().expect("rollback");
+    assert_eq!(back.version, Some(semver::Version::new(0, 0, 1)));
+    let forward = pkexec.install(Path::new("/staged")).expect("install");
+    assert_eq!(forward.version, Some(semver::Version::new(0, 0, 2)));
+}

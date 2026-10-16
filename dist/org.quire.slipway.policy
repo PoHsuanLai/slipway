@@ -8,6 +8,11 @@
   does not verify, so what it installs can only be a release signed by the project. Someone who
   is not at the keyboard (a remote or inactive session) is refused.
 
+  Going back to an earlier version is different: it is a downgrade, and nothing about a program of the
+  person asking for one says the person wants it. It asks for the administrator's password (and keeps
+  the answer for a few minutes, as the system does elsewhere). It is a separate program with its own
+  action; the installing program cannot go back at all.
+
   Telling the system that a session started well, and asking it to guard the next start, needs no
   password either: the helper keeps a record only it can write, counts only what only it can see (the
   boots of the computer), and puts the previous version back only after the current one has failed to
@@ -25,6 +30,16 @@
       <allow_active>yes</allow_active>
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/slipway-apply</annotate>
+  </action>
+  <action id="org.quire.slipway.rollback">
+    <description>Go back to an earlier version of the software</description>
+    <message>Going back to an earlier version needs your password.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/slipway-rollback</annotate>
   </action>
   <action id="org.quire.slipway.health">
     <description>Check that the latest update started well</description>

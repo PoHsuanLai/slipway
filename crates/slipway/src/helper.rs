@@ -20,12 +20,20 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 const INSTALL_USAGE: &str = "usage: slipway-apply <staged folder>
-       slipway-apply --rollback
 
-Installs the signed release staged in the folder, or goes back to the previous release.
+Installs the signed release staged in the folder. It cannot go back to an earlier release: that is
+slipway-rollback, which asks for the administrator's password.
 
-exit codes: 0 done, 1 failed, 2 wrong command, 3 refused (not newer, or nothing to go back to),
-            4 the release did not check out, 5 another update is running, 6 no key to check with";
+exit codes: 0 done, 1 failed, 2 wrong command, 3 refused (not newer), 4 the release did not check out,
+            5 another update is running, 6 no key to check with";
+
+const ROLLBACK_USAGE: &str = "usage: slipway-rollback
+
+Goes back to the previous release; the release left becomes the one a second run goes back to. The
+system asks for the administrator's password before this runs.
+
+exit codes: 0 done, 1 failed, 2 wrong command, 3 refused (nothing to go back to), 4 the kept record of
+            the release did not check out, 5 another update is running, 6 no key to check with";
 
 const HEALTH_USAGE: &str = "usage: slipway-health recover
        slipway-health confirmed
@@ -48,15 +56,6 @@ pub enum Parsed<T> {
     Run(T),
 }
 
-/// What `slipway-apply` can be asked.
-#[derive(Debug, PartialEq, Eq)]
-pub enum InstallRequest {
-    /// Install the release staged in this folder.
-    Install(PathBuf),
-    /// Go back to the previous release.
-    Rollback,
-}
-
 /// What `slipway-health` can be asked.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HealthRequest {
@@ -66,8 +65,8 @@ pub enum HealthRequest {
     Confirmed,
 }
 
-/// Reads the arguments of `slipway-apply`.
-pub fn parse_install(mut args: impl Iterator<Item = String>) -> Parsed<InstallRequest> {
+/// Reads the arguments of `slipway-apply`: the folder a release is staged in.
+pub fn parse_install(mut args: impl Iterator<Item = String>) -> Parsed<PathBuf> {
     let Some(first) = args.next() else {
         return Parsed::Bad;
     };
@@ -76,9 +75,17 @@ pub fn parse_install(mut args: impl Iterator<Item = String>) -> Parsed<InstallRe
     }
     match first.as_str() {
         "--help" | "-h" => Parsed::Help,
-        "--rollback" => Parsed::Run(InstallRequest::Rollback),
         s if s.starts_with('-') => Parsed::Bad,
-        _ => Parsed::Run(InstallRequest::Install(PathBuf::from(first))),
+        _ => Parsed::Run(PathBuf::from(first)),
+    }
+}
+
+/// Reads the arguments of `slipway-rollback`: there are none.
+pub fn parse_rollback(mut args: impl Iterator<Item = String>) -> Parsed<()> {
+    match (args.next().as_deref(), args.next()) {
+        (None, _) => Parsed::Run(()),
+        (Some("--help" | "-h"), None) => Parsed::Help,
+        _ => Parsed::Bad,
     }
 }
 
@@ -155,13 +162,13 @@ fn conclude(program: &str, result: Result<Applied, ApplyError>) -> ExitCode {
     }
 }
 
-/// `slipway-apply`: install a staged release, or (for now) go back.
+/// `slipway-apply`: install a staged release.
 pub fn install_main() -> ExitCode {
     const NAME: &str = "slipway-apply";
     if let Err(code) = reset(NAME) {
         return finish(code);
     }
-    let request = match parse_install(std::env::args().skip(1)) {
+    let dir = match parse_install(std::env::args().skip(1)) {
         Parsed::Help => {
             println!("{INSTALL_USAGE}");
             return finish(Code::Done);
@@ -170,21 +177,42 @@ pub fn install_main() -> ExitCode {
             eprintln!("{INSTALL_USAGE}");
             return finish(Code::Usage);
         }
-        Parsed::Run(request) => request,
+        Parsed::Run(dir) => dir,
     };
     let prepared = match prepare(NAME) {
         Ok(prepared) => prepared,
         Err(code) => return finish(code),
     };
-    let relabel = Selinux::system();
     conclude(
         NAME,
-        match request {
-            InstallRequest::Rollback => rollback_with(&prepared.layout, &prepared.key, &relabel),
-            InstallRequest::Install(dir) => {
-                install_with(&prepared.layout, &dir, &prepared.key, &relabel)
-            }
-        },
+        install_with(&prepared.layout, &dir, &prepared.key, &Selinux::system()),
+    )
+}
+
+/// `slipway-rollback`: go back to the previous release. Its polkit action asks for a password.
+pub fn rollback_main() -> ExitCode {
+    const NAME: &str = "slipway-rollback";
+    if let Err(code) = reset(NAME) {
+        return finish(code);
+    }
+    match parse_rollback(std::env::args().skip(1)) {
+        Parsed::Help => {
+            println!("{ROLLBACK_USAGE}");
+            return finish(Code::Done);
+        }
+        Parsed::Bad => {
+            eprintln!("{ROLLBACK_USAGE}");
+            return finish(Code::Usage);
+        }
+        Parsed::Run(()) => {}
+    }
+    let prepared = match prepare(NAME) {
+        Ok(prepared) => prepared,
+        Err(code) => return finish(code),
+    };
+    conclude(
+        NAME,
+        rollback_with(&prepared.layout, &prepared.key, &Selinux::system()),
     )
 }
 

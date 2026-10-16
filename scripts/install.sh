@@ -10,7 +10,8 @@
 #             (default none; the environment variable DESTDIR also sets it)
 # --sysconfdir where the system settings go (default /etc when the prefix is /usr, else PREFIX/etc;
 #             the environment variable SYSCONFDIR also sets it)
-# --bin-dir   install the already built slipway-apply and slipway-health found in DIR instead of building them
+# --bin-dir   install the already built slipway-apply, slipway-rollback and slipway-health found in DIR
+#             instead of building them
 # --no-build  install from target/release (or $CARGO_TARGET_DIR/release) without building first
 # --root      the install root the desktop lives under (default /opt/quire); the unit starts
 #             ROOT/current/bin/slipway and the system settings name it
@@ -18,6 +19,7 @@
 #
 # What goes where (DESTDIR, when given, is in front of all of it):
 #   PREFIX/libexec/slipway-apply                       the privileged helper that installs a release
+#   PREFIX/libexec/slipway-rollback                    the privileged helper that goes back (asks for a password)
 #   PREFIX/libexec/slipway-health                      the privileged half of the health check
 #   PREFIX/share/polkit-1/actions/org.quire.slipway.policy   lets the person at the keyboard run them
 #   PREFIX/lib/systemd/user/slipway.service            the daily check, part of the graphical session
@@ -160,11 +162,11 @@ if [ -n "$bin_dir" ]; then
     built=$bin_dir
 else
     if [ "$build" = yes ]; then
-        (cd "$here" && cargo build --release --locked -p slipway --bin slipway-apply --bin slipway-health)
+        (cd "$here" && cargo build --release --locked -p slipway --bin slipway-apply --bin slipway-rollback --bin slipway-health)
     fi
     built=${CARGO_TARGET_DIR:-$here/target}/release
 fi
-for helper in slipway-apply slipway-health; do
+for helper in slipway-apply slipway-rollback slipway-health; do
     if [ ! -x "$built/$helper" ]; then
         echo "install.sh: $built/$helper is not there; build first or point --bin-dir at it" >&2
         exit 1
@@ -174,9 +176,11 @@ done
 # The files in dist/ name /usr/libexec/slipway-apply and /opt/quire; different choices change those paths.
 libexec=$prefix/libexec
 put 755 "$built/slipway-apply" "$libexec/slipway-apply"
+put 755 "$built/slipway-rollback" "$libexec/slipway-rollback"
 put 755 "$built/slipway-health" "$libexec/slipway-health"
 put 644 "$dist/org.quire.slipway.policy" "$prefix/share/polkit-1/actions/org.quire.slipway.policy" \
     /usr/libexec/slipway-apply "$libexec/slipway-apply" \
+    /usr/libexec/slipway-rollback "$libexec/slipway-rollback" \
     /usr/libexec/slipway-health "$libexec/slipway-health"
 put 644 "$dist/slipway.service" "$prefix/lib/systemd/user/slipway.service" /opt/quire "$root"
 put 644 "$dist/org.quire.Updates1.service" "$prefix/share/dbus-1/services/org.quire.Updates1.service" \

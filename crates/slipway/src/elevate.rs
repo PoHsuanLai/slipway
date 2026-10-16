@@ -193,7 +193,7 @@ impl Elevate for Pkexec {
     }
 
     fn rollback(&self) -> Result<Report, ApplyFailure> {
-        self.run(&self.helpers.install, &[OsStr::new("--rollback")])
+        self.run(&self.helpers.rollback, &[])
     }
 
     fn recover(&self) -> Result<Recovery, ApplyFailure> {

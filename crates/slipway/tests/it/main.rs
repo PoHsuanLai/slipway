@@ -10,6 +10,7 @@ mod elevate_run;
 mod exports_applied;
 mod feed_stage;
 mod health_start;
+mod privileged_programs;
 mod session_guard;
 mod small;
 mod support;
