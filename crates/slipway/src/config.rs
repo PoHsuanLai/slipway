@@ -28,8 +28,13 @@ pub const DEFAULT_ROLLBACK_PATH: &str = "/usr/libexec/slipway-rollback";
 /// Where the program that keeps the root-side health record lives.
 pub const DEFAULT_HEALTH_PATH: &str = "/usr/libexec/slipway-health";
 /// Who may ask the update service to go back to the previous version: the shell's unit, and the
-/// Settings app (by its app id) that shows the Software Update page.
-pub const DEFAULT_CALLERS: [&str; 2] = ["sill.service", "org.quire.Settings"];
+/// Settings app that shows the Software Update page: by its app id when a launcher started it, and by
+/// the unit `org.quire.Settings.service` when the session bus started it on demand.
+pub const DEFAULT_CALLERS: [&str; 3] = [
+    "sill.service",
+    "org.quire.Settings",
+    "org.quire.Settings.service",
+];
 
 /// The settings, each with a default.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]

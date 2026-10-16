@@ -201,8 +201,8 @@ Properties (all emit `PropertiesChanged`): `State` (idle, checking, available, d
 installing, installed, failed), `Current`, `Available` ("" when none), `Notes`, `Size` (bytes),
 `Progress` (permille), `LastChecked` (unix seconds, 0 never), `Problem` (plain words).
 Methods: `Check()`, `Install()`, `Rollback()`. `Rollback()` is answered only for a caller that is the
-shell's unit or the Settings app (`callers` in the system settings, default `sill.service` and
-`org.quire.Settings`; the bus names the caller's process and `/proc/<pid>/cgroup` the unit or app scope it runs in,
+shell's unit or the Settings app (`callers` in the system settings, default `sill.service`, `org.quire.Settings` (an app a launcher started)
+and `org.quire.Settings.service` (the same app started by bus activation, which runs as that unit); the bus names the caller's process and `/proc/<pid>/cgroup` the unit or app scope it runs in,
 `service/caller.rs`), and the system then asks for the administrator's password. The caller check keeps a stray
 program from putting a password prompt in front of the person; it is not a boundary (a program of the person can
 start itself in a scope of its choosing), the password is. `Install()` is open to any caller on the person's own

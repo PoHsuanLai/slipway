@@ -27,11 +27,20 @@ fn the_cgroup_names_the_unit_or_scope() {
 #[test]
 fn only_the_shell_and_settings_may_ask_to_go_back() {
     let allowed = Config::default().callers;
-    assert_eq!(allowed, vec!["sill.service", "org.quire.Settings"]);
+    assert_eq!(
+        allowed,
+        vec![
+            "sill.service",
+            "org.quire.Settings",
+            "org.quire.Settings.service"
+        ]
+    );
     let table = [
         ("sill.service", true),
         ("app-org.quire.Settings-1234.scope", true),
         ("app-gnome-org.quire.Settings-99.scope", true),
+        // Started by the session bus on demand: a unit, not an app scope.
+        ("org.quire.Settings.service", true),
         // Near misses.
         ("app-org.quire.Settings.scope", false),
         ("app-org.quire.Settings-x.scope", false),
@@ -40,6 +49,9 @@ fn only_the_shell_and_settings_may_ask_to_go_back() {
         ("evil-sill.service", false),
         ("sill.service.d", false),
         ("org.quire.Settings-1234.scope", false),
+        ("org.quire.Settings.service.d", false),
+        ("evil-org.quire.Settings.service", false),
+        ("org.quire.SettingsEvil.service", false),
         // Everything else a person runs.
         ("app-kitty-77.scope", false),
         ("session-3.scope", false),
