@@ -1,16 +1,18 @@
 //! Getting the release files: where they are, and the download itself.
 
+mod cache;
 mod feed;
 mod stage;
 mod ureq_fetch;
 
+pub use cache::prune_cache;
 pub use feed::{FeedError, Fetched, latest, of_version};
-pub use stage::{StageError, stage};
+pub use stage::{Patience, StageError, stage, stage_with};
 
 pub use ureq_fetch::UreqFetch;
 
 use semver::Version;
-use std::io::Read;
+use std::io::{self, Read};
 
 /// What a fetch failed with.
 #[derive(Debug, thiserror::Error)]
@@ -49,6 +51,26 @@ impl std::fmt::Debug for Download {
 pub trait Fetch: Send + Sync {
     /// Opens `url` for reading.
     fn open(&self, url: &str) -> Result<Download, FetchError>;
+
+    /// Opens `url` for reading from byte `offset` on, to resume a download. The default opens it from
+    /// the start and throws the first `offset` bytes away, which is right for a server that cannot
+    /// resume; one that can overrides it.
+    fn open_from(&self, url: &str, offset: u64) -> Result<Download, FetchError> {
+        let mut download = self.open(url)?;
+        skip(&mut download.body, offset)?;
+        Ok(download)
+    }
+}
+
+/// Reads and drops the next `count` bytes of `reader`; a body that ends sooner is an unreachable site.
+pub fn skip(reader: &mut (impl Read + ?Sized), count: u64) -> Result<(), FetchError> {
+    let cut = |why: String| FetchError::Unreachable(why);
+    let skipped =
+        io::copy(&mut reader.take(count), &mut io::sink()).map_err(|e| cut(e.to_string()))?;
+    if skipped < count {
+        return Err(cut("the connection ended too early".to_owned()));
+    }
+    Ok(())
 }
 
 /// Where release files are fetched from.

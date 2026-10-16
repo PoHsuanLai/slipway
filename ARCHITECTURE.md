@@ -126,6 +126,13 @@ cannot disagree about the root or the key. The person's own `$XDG_CONFIG_HOME/sl
 may only set `settings_command` and `name` (what the notification's button runs and what the software
 is called); every other key in it is ignored.
 
+Downloads (`fetch/stage.rs`) resume: the bundle is written as `<name>.part`, and what a broken connection or an
+earlier run left there is hashed again and continued with a range request (a site that ignores the range is
+read from its start and the first bytes dropped). There is no cap on the whole download: one connection is read
+for at most two minutes (`READ_WINDOW`), a connection that brought bytes is simply continued, and one that
+brought none counts as a stall; four stalls in a row give up. The digest of the finished file decides, so
+resuming trusts nothing. The cache keeps only the version being fetched (`prune_cache`).
+
 The daemon never writes under the root. It downloads into `$XDG_CACHE_HOME/slipway/<version>/`,
 checks the signature of `release.toml` and then the bundle's size and digest, and only then asks
 `slipway-apply` to install the directory. The helper trusts nothing but the path, and not even that:

@@ -360,6 +360,10 @@ impl Engine {
         );
         let runtime = tokio::runtime::Handle::current();
         tokio::task::spawn_blocking(move || {
+            // Earlier downloads that were superseded or never finished are not worth keeping.
+            if let Err(e) = fetch::prune_cache(&engine.ctx.cache_dir, &fetched.release.version) {
+                tracing::warn!("could not clear the old downloads: {e}");
+            }
             if Staged::read(&dir, &*auth).is_ok() {
                 return Ok(());
             }

@@ -4,7 +4,8 @@ use slipway::apply::Staged;
 use slipway::config::Config;
 use slipway::elevate::{ApplyFailure, Elevate};
 use slipway::fetch::{
-    Download, FeedError, Fetch, FetchError, Source, StageError, latest, of_version, stage,
+    Download, FeedError, Fetch, FetchError, Patience, Source, StageError, latest, of_version,
+    stage, stage_with,
 };
 use slipway::report::Report;
 use slipway::service::{Context, Engine, Job, Phase, Status};
@@ -17,9 +18,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 /// Serves bytes from memory and remembers what was asked.
-struct Memory {
-    files: BTreeMap<String, Vec<u8>>,
-    asked: Mutex<Vec<String>>,
+pub struct Memory {
+    pub files: BTreeMap<String, Vec<u8>>,
+    pub asked: Mutex<Vec<String>>,
 }
 
 impl Fetch for Memory {
@@ -35,9 +36,9 @@ impl Fetch for Memory {
     }
 }
 
-const BASE: &str = "https://example.test/desktop-releases/releases";
+pub const BASE: &str = "https://example.test/desktop-releases/releases";
 
-fn served(
+pub fn served(
     version: &str,
     bundle_override: Option<Vec<u8>>,
 ) -> (Memory, Source, slipway::fetch::Fetched) {
@@ -143,17 +144,52 @@ fn staging_downloads_checks_and_reports_progress() {
     assert_eq!(staged.release.version, Version::new(0, 2, 0));
 }
 
+/// Tries once and does not wait between tries, so a test of giving up is quick.
+const IMPATIENT: Patience = Patience {
+    stalls: 1,
+    pause: Duration::ZERO,
+};
+
 #[test]
 fn a_download_that_is_not_the_bundle_is_thrown_away() {
-    for wrong in [b"short".to_vec(), vec![0u8; 100_000]] {
+    // Too long, or the right length with the wrong bytes: refused, and nothing is kept.
+    let right_length = build(&Recipe::new("0.2.0")).bundle.len();
+    for wrong in [vec![0u8; 100_000], vec![0u8; right_length]] {
         let (memory, source, fetched) = served("0.2.0", Some(wrong));
         let dir = tempfile::tempdir().expect("tempdir");
-        let err =
-            stage(&memory, &source, &fetched, dir.path(), &mut |_, _| {}).expect_err("mismatch");
+        let err = stage_with(
+            &memory,
+            &source,
+            &fetched,
+            dir.path(),
+            &mut |_, _| {},
+            IMPATIENT,
+        )
+        .expect_err("mismatch");
         assert!(matches!(err, StageError::Mismatch));
         assert!(!dir.path().join("bundle.tar.zst").exists());
         assert!(!dir.path().join("bundle.tar.zst.part").exists());
     }
+}
+
+#[test]
+fn a_download_that_ends_short_is_given_up_on_and_never_published() {
+    let (memory, source, fetched) = served("0.2.0", Some(b"short".to_vec()));
+    let dir = tempfile::tempdir().expect("tempdir");
+    let err = stage_with(
+        &memory,
+        &source,
+        &fetched,
+        dir.path(),
+        &mut |_, _| {},
+        IMPATIENT,
+    )
+    .expect_err("short");
+    assert!(
+        matches!(err, StageError::Fetch(FetchError::Unreachable(_))),
+        "{err}"
+    );
+    assert!(!dir.path().join("bundle.tar.zst").exists());
 }
 
 /// A helper that is never expected to run.

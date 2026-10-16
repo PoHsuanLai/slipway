@@ -87,6 +87,13 @@ Departures from the plan, standing facts and open items. An entry names the cond
     is parsed by the service (ARCHITECTURE s.5). A conflict is logged and posted once as a notification; a
     warning (a security label that could not be set) is logged only, because nothing a person can do changes it.
     `Elevate::install` and `rollback` return the report; the helper run has a 30-minute limit.
+21. **Downloads resume and stall instead of timing out (ROOT-13).** The one hour cap and the restart from zero
+    are gone (ARCHITECTURE s.5). `Fetch::open_from` is the seam (its default drops the first bytes, so a fake
+    or a site without ranges still works). The windows (`READ_WINDOW` 120 s, `ANSWER_WITHIN` 60 s) and the
+    stall allowance (`Patience`, 4) are not tuned on the slow HiNet route; they are the first thing to look at if
+    a download there still fails. Not run against the real release site: whether GitHub's download redirect
+    keeps the `Range` header is unchecked (if it does not, the first bytes are dropped and it still works, just
+    slower).
 
 ## Open questions
 
