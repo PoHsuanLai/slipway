@@ -155,6 +155,14 @@ Departures from the plan, standing facts and open items. An entry names the cond
     placed only when it changed, and a restart would drop key state mid-typing); it picks the new program up at the next start of
     the computer or of the service. Test: `what_the_system_is_told_follows_the_paths_that_changed` (placed, removed, both).
     The helper is installed by hand, so a computer needs the new helper (`scripts/install.sh`) before this holds there.
+28. **A release-only install enables the touchpad daemon (N-2, lane fa7).** `palmrest.service` is a system service placed
+    by the release (`[Install] WantedBy=multi-user.target`), but `settle` started only the socket and the keyboard map, so
+    Magic Mouse gestures did not run on a release-only install although `install/system.sh palmrest` enables it. `commands`
+    now adds `enable --now palmrest.service` when that file is *placed*, after the keyboard map's, through the same
+    `run_first` path: a missing `systemctl` is skipped and a failing one is one warning, the files stay in place. Not done:
+    a running daemon is not restarted when a release replaces its program, as for the keyboard map. Test:
+    `what_the_system_is_told_follows_the_paths_that_changed` (placed, removed, all three). The helper is installed by hand,
+    so a computer needs the new helper (`scripts/install.sh`) before this holds there.
 
 ## Open questions
 

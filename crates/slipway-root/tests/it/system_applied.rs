@@ -592,6 +592,30 @@ fn what_the_system_is_told_follows_the_paths_that_changed() {
             ],
         ),
         (
+            "the touchpad daemon is placed: read again, then enabled and started",
+            vec![placed("/usr/lib/systemd/system/palmrest.service")],
+            vec!["daemon-reload", "enable --now palmrest.service"],
+        ),
+        (
+            "the touchpad daemon is removed: read again, not started",
+            vec![removed("/usr/lib/systemd/system/palmrest.service")],
+            vec!["daemon-reload"],
+        ),
+        (
+            "all three services: the socket, the map, then the touchpad daemon",
+            vec![
+                placed("/usr/lib/systemd/system/palmrest.service"),
+                placed("/usr/lib/systemd/system/keycap.service"),
+                placed("/usr/lib/systemd/system/turnstile.socket"),
+            ],
+            vec![
+                "daemon-reload",
+                "enable --now turnstile.socket",
+                "enable --now keycap.service",
+                "enable --now palmrest.service",
+            ],
+        ),
+        (
             "a rule",
             vec![placed("/etc/udev/rules.d/70-keycap.rules")],
             vec!["control --reload-rules", "trigger --subsystem-match=misc"],

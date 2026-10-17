@@ -4,7 +4,7 @@
 //! A unit file, a device rule and a service that should be listening are three kinds of thing the
 //! system reads once. After `SyncSystem` the helper asks the system to read the unit folder again, to
 //! read the device rules again and apply them to devices already there, and to start the one socket
-//! the desktop's input service listens on, and the one service that maps the keyboard. What runs is decided by [`commands`] from the paths alone
+//! the desktop's input service listens on, and the two services that map the keyboard and read the touchpad. What runs is decided by [`commands`] from the paths alone
 //! (a pure function), by fixed program paths, never by `PATH`; a missing program is not an error and a
 //! failing one is a warning, like the security labels: the files are in place either way.
 
@@ -23,6 +23,11 @@ const INPUT_SOCKET: &str = "/usr/lib/systemd/system/turnstile.socket";
 /// vendor unit folder and its `[Install]` section is never acted on by anything else, so without this a
 /// release-only install would leave the keys unmapped until someone enabled it. Its unit name is the file name.
 const KEYMAP_SERVICE: &str = "/usr/lib/systemd/system/keycap.service";
+
+/// The other service that is enabled and started as soon as it is placed: the touchpad daemon (Magic Mouse
+/// gestures). Like the keyboard map it is a system service whose `[Install]` section (`multi-user.target`) nothing
+/// else acts on, so a release-only install would leave it stopped. Its unit name is the file name.
+const TOUCHPAD_SERVICE: &str = "/usr/lib/systemd/system/palmrest.service";
 
 /// Where the service manager's tool is looked for (a fixed list, so root never depends on `PATH`).
 const MANAGER_TOOLS: &[&str] = &["/usr/bin/systemctl", "/bin/systemctl"];
@@ -81,10 +86,14 @@ const START_KEYMAP_SERVICE: Command = Command {
     tools: MANAGER_TOOLS,
     args: &["enable", "--now", "keycap.service"],
 };
+const START_TOUCHPAD_SERVICE: Command = Command {
+    tools: MANAGER_TOOLS,
+    args: &["enable", "--now", "palmrest.service"],
+};
 
 /// What to run after `changes`, in order: units are read again before the socket is started, rules are
 /// read again before they are applied, and the input socket is started before the keyboard map, which asks
-/// it for its virtual keyboards.
+/// it for its virtual keyboards, and the touchpad daemon last.
 pub fn commands(changes: &[Change]) -> Vec<Command> {
     let touches = |folder: &str| changes.iter().any(|c| c.path().starts_with(folder));
     let mut out = Vec::new();
@@ -105,6 +114,9 @@ pub fn commands(changes: &[Change]) -> Vec<Command> {
     }
     if placed(KEYMAP_SERVICE) {
         out.push(START_KEYMAP_SERVICE);
+    }
+    if placed(TOUCHPAD_SERVICE) {
+        out.push(START_TOUCHPAD_SERVICE);
     }
     out
 }

@@ -143,7 +143,7 @@ effect, with programs found at fixed paths (never `PATH`). `commands` decides fr
 --reload-rules` and `udevadm trigger --subsystem-match=misc`; the file `turnstile.socket` being *placed* (not removed)
 also gets `systemctl enable --now turnstile.socket`, after the reload, and `keycap.service` being *placed* gets `systemctl enable
 --now keycap.service` after that (the keyboard map asks the input service for its devices; `install/system.sh` of the desktop
-enables it too, so both routes end alike). A missing program is skipped and a failing one
+enables it too, so both routes end alike), then `palmrest.service` being *placed* gets `systemctl enable --now palmrest.service` (the touchpad daemon, same reason; `install/system.sh palmrest` enables it too). A missing program is skipped and a failing one
 is a warning in the report, as with the security labels: the files are in place either way. It is a second method on
 the `Relabel` seam (`settle`, a no-op by default), implemented by `Settling` (the real helper's choice, wrapping
 `Selinux`), so tests that use `NoRelabel` or a fake never run a real program.
