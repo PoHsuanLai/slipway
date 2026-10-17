@@ -9,6 +9,9 @@ Type=simple
 ExecStart=/opt/quire/current/bin/slipway run
 Restart=on-failure
 RestartSec=10
+# The update service is trusted by identity (peephole `Full`), which needs every loader variable thrown away: the list is
+# peephole's LOADER_VARIABLES, and the desktop's gate/check-loader-unset.sh compares it.
+UnsetEnvironment=LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT GCONV_PATH GIO_EXTRA_MODULES GTK_MODULES GTK_PATH GST_PLUGIN_PATH GST_PLUGIN_SYSTEM_PATH LIBGL_DRIVERS_PATH MESA_LOADER_DRIVER_OVERRIDE __EGL_VENDOR_LIBRARY_DIRS __EGL_VENDOR_LIBRARY_FILENAMES GBM_BACKENDS_PATH LIBVA_DRIVERS_PATH VK_ICD_FILENAMES VK_DRIVER_FILES VK_ADD_DRIVER_FILES VK_LAYER_PATH VK_ADD_LAYER_PATH VK_INSTANCE_LAYERS VK_LOADER_LAYERS_ENABLE
 
 [Install]
 WantedBy=graphical-session.target
