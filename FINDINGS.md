@@ -134,6 +134,18 @@ Departures from the plan, standing facts and open items. An entry names the cond
     places these files; an older helper refuses that release whole. Not done: disabling the socket when a release
     stops listing it (only the reload runs), and loading the `uinput` module at once (it loads at the next boot, or
     when the service starts and needs it).
+26. **No polkit actions folder among the export folders (NEW-ROOT-3, lane pa3-root).** `/usr/share/polkit-1/actions` was in
+    `ALLOWED_LINK_DIRS` (and in the desktop's `release.py` lists), so a release could export a `.policy` that annotates
+    `org.freedesktop.policykit.exec.path` for any program with `allow_active=yes`: `pkexec` then runs it as root with no
+    password for the person at the keyboard, the very thing the exact system-file list (ROOT-07) closes for rules. It is
+    removed; the list is ten folders, the desktop's `release.py` has the same ten, and `release/selftest.sh` forges a
+    release exporting there (`export-polkit`) and checks `verify.sh` refuses it. The desktop ships no polkit action
+    (slipway's own policy comes from `scripts/install.sh`; keycap's file is a rule, named in the exact list), so nothing
+    needed a replacement. Were one ever needed, it would be one exact `/usr/share/polkit-1/actions` rule in `system.rs`
+    for that file name, and the check that it does not give `allow_active=yes` to a privileged action would have to
+    be added to the desktop's `release/check-helpers.py` first. Test: `export_links_are_allowed_only_below_the_listed_folders`
+    now refuses three links in that folder. The helper and the daemon share the list, so a computer needs the new helper
+    (`scripts/install.sh`) before this holds there; an older helper still accepts a release that exports there.
 
 ## Open questions
 
@@ -171,7 +183,7 @@ Departures from the plan, standing facts and open items. An entry names the cond
 written as the exact change, for that lane (nothing of its was edited).
 
 Agree already (checked line by line): the three asset names, `format = 1`, `[[file]]` fields, `mode = 0o...`
-integers, the export directories (the same list on both sides; now eleven, see decision 15), absolute clean export links, `target`
+integers, the export directories (the same list on both sides; now ten, see decisions 15 and 26), absolute clean export links, `target`
 relative to the current release, no links or devices in the bundle, folders only where files live (the
 pipeline emits only the ancestors of files, slipway refuses any other folder), unique entries, bundle
 digest and size, `components` as a string table, build metadata refused on both sides.

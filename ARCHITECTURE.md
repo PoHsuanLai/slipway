@@ -70,8 +70,8 @@ the bundle, `[[export]]` (`link`, `target`) per link the system needs, and `[[sy
 file the helper copies into a system folder. `slipway-core::Release`
 validates all of it: simple paths only (no absolute, `..`, empty or backslash parts, nothing under
 `.slipway/`), unique files with none inside another, modes that are plain permission bits readable
-by the owner and not writable by anyone else, no setuid; export links only under the eleven allowed
-directories (`ALLOWED_LINK_DIRS`, each named, no wildcards), unique, each pointing at a file the bundle lists
+by the owner and not writable by anyone else, no setuid; export links only under the ten allowed
+directories (`ALLOWED_LINK_DIRS`, each named, no wildcards; never polkit's actions folder, which could grant root without a password), unique, each pointing at a file the bundle lists
 (not a folder); system files only at a path `ALLOWED_SYSTEM_FILES` names (a folder and an exact name or a name ending), unique, each with
 its contents at `system<path>` in the bundle, and nothing else under `system/`. Limits: `release.toml`
 24 MiB, 100000 files, notes 16 KiB, bundle 8 GiB, 16 GiB unpacked. Folders in the bundle are made

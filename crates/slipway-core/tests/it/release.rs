@@ -209,14 +209,13 @@ fn path_errors_carry_through() {
 #[test]
 fn export_links_are_allowed_only_below_the_listed_folders() {
     // (link, allowed)
-    let table: [(&str, bool); 24] = [
+    let table: [(&str, bool); 26] = [
         ("/usr/local/bin/casement", true),
         ("/usr/share/wayland-sessions/quire.desktop", true),
         ("/usr/share/xdg-desktop-portal/portals/quire.portal", true),
         ("/usr/share/dbus-1/services/org.quire.Mail.service", true),
         ("/usr/lib/systemd/user/casement.service", true),
         ("/usr/share/applications/mailo.desktop", true),
-        ("/usr/share/polkit-1/actions/org.quire.slipway.policy", true),
         ("/usr/share/quire/intents/org.quire.Shell.toml", true),
         ("/usr/share/quire/skills/mail/SKILL.md", true),
         ("/usr/share/porter/providers/openai.toml", true),
@@ -234,6 +233,16 @@ fn export_links_are_allowed_only_below_the_listed_folders() {
         ("/etc/porter/callers.toml", false),
         ("/usr/lib/systemd/system/keycap.service", false),
         ("/usr/share/polkit-1/rules.d/keycap.rules", false),
+        // A polkit action can make pkexec run a program as root with no password: a release never adds one.
+        (
+            "/usr/share/polkit-1/actions/org.quire.slipway.policy",
+            false,
+        ),
+        (
+            "/usr/share/polkit-1/actions/org.example.root-for-all.policy",
+            false,
+        ),
+        ("/usr/share/polkit-1/actions/sub/x.policy", false),
         ("/usr/share/dbus-1/system-services/x.service", false),
         // Climbing out of an allowed folder.
         ("/usr/share/quire/../../../etc/passwd", false),
