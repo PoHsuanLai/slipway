@@ -16,7 +16,11 @@ version = 2
 yanked = "deny"
 # An advisory that does not apply is ignored by id, one entry each, with the reason beside it:
 #   { id = "RUSTSEC-0000-0000", reason = "why it does not reach us" },
-ignore = []
+ignore = [
+    { id = "RUSTSEC-2026-0370", reason = "zvariant is unmaintained only because zbus 6 folds it in as its wire module; no known flaw; remove when the desktop set moves to zbus 6" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names is unmaintained only because zbus 6 folds it in; no known flaw; remove when the desktop set moves to zbus 6" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive is unmaintained only because zbus 6 provides its derives; no known flaw; remove when the desktop set moves to zbus 6" },
+]
 
 [licenses]
 allow = [
