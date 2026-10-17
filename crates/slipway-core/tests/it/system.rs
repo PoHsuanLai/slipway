@@ -19,7 +19,7 @@ fn doc_placing(dest: &str) -> Doc {
 #[test]
 fn a_system_file_is_accepted_only_when_a_rule_names_it() {
     // (destination, accepted)
-    let table: [(&str, bool); 64] = [
+    let table: [(&str, bool); 65] = [
         // The files the desktop places today.
         ("/etc/pam.d/sill", true),
         ("/etc/udev/rules.d/60-sill-ddc.rules", true),
