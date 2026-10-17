@@ -19,7 +19,7 @@ fn doc_placing(dest: &str) -> Doc {
 #[test]
 fn a_system_file_is_accepted_only_when_a_rule_names_it() {
     // (destination, accepted)
-    let table: [(&str, bool); 54] = [
+    let table: [(&str, bool); 64] = [
         // The files the desktop places today.
         ("/etc/pam.d/sill", true),
         ("/etc/udev/rules.d/60-sill-ddc.rules", true),
@@ -35,6 +35,14 @@ fn a_system_file_is_accepted_only_when_a_rule_names_it() {
         ("/usr/lib/systemd/system/turnstile.service", true),
         ("/etc/udev/rules.d/72-turnstile.rules", true),
         ("/etc/modules-load.d/turnstile.conf", true),
+        // The touchpad daemon as a system service, and the user units that must be plain files.
+        ("/usr/lib/systemd/system/palmrest.service", true),
+        ("/usr/lib/systemd/user/sill.service", true),
+        ("/usr/lib/systemd/user/org.quire.Settings.service", true),
+        (
+            "/usr/lib/systemd/user/xdg-desktop-portal.service.d/10-quire.conf",
+            true,
+        ),
         ("/etc/porter/callers.toml", true),
         ("/etc/porter/inferd-callers.toml", true),
         ("/etc/quire/intentd-callers.toml", true),
@@ -52,6 +60,16 @@ fn a_system_file_is_accepted_only_when_a_rule_names_it() {
         ("/usr/lib/systemd/system/turnstile.timer", false),
         ("/usr/lib/systemd/system/turnstile.service.d", false),
         ("/etc/udev/rules.d/73-turnstile.rules", false),
+        ("/usr/lib/systemd/system/palmrest.socket", false),
+        ("/usr/lib/systemd/user/sill.target", false),
+        ("/usr/lib/systemd/user/.service", false),
+        ("/usr/lib/systemd/user/sill.service.d/10-evil.conf", false),
+        (
+            "/usr/lib/systemd/user/xdg-desktop-portal.service.d/20-evil.conf",
+            false,
+        ),
+        ("/usr/lib/systemd/user/other.service.d/10-quire.conf", false),
+        ("/usr/lib/systemd/user/sub/sill.service", false),
         ("/etc/porter/other.toml", false),
         ("/etc/quire/policy.toml", false),
         ("/etc/quire/-callers.toml", false),
@@ -171,6 +189,17 @@ fn a_system_listing_that_does_not_match_the_bundle_is_refused() {
             "contents not in the bundle",
             |d| d.files.retain(|f| !f.path.starts_with("system/")),
             |e| matches!(e, ReleaseError::SystemSourceMissing(_)),
+        ),
+        (
+            "a path both linked and placed",
+            |d| {
+                let unit = "/usr/lib/systemd/user/sill.service";
+                d.files.push(f(&format!("system{unit}"), "unit"));
+                d.system.push(unit.to_owned());
+                d.exports
+                    .push((unit.into(), "share/wayland-sessions/quire.desktop".into()));
+            },
+            |e| matches!(e, ReleaseError::ExportedAndPlaced(_)),
         ),
         (
             "a file in the system folder nobody listed",
@@ -308,6 +337,15 @@ fn system_files_are_placed_kept_replaced_removed_or_left_alone() {
             "dropped by the new release and already gone",
             plan(&[], std::slice::from_ref(&gone), &[]),
             vec![],
+        ),
+        (
+            "an earlier release's export link where this one places a file: replace",
+            plan(
+                std::slice::from_ref(&new_v2),
+                &[],
+                &[(UDEV, SystemFound::ExportLink)],
+            ),
+            vec![place(&new_v2)],
         ),
         (
             "dropped but replaced by a link: leave alone",

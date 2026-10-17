@@ -53,7 +53,9 @@ pub enum ExportAction {
     },
 }
 
-fn into_root(target: &Path, root: &Path) -> bool {
+/// Whether `target` is a path inside the install root `root`, with no climbing out of it: what a link
+/// made by one of our releases' exports points at.
+pub fn into_root(target: &Path, root: &Path) -> bool {
     target.starts_with(root) && !target.components().any(|c| c == Component::ParentDir)
 }
 

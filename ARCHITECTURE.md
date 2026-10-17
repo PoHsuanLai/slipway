@@ -118,10 +118,10 @@ path>`, `release.toml` lists each destination in `[[system]]`, and `SyncSystem` 
 from the new release's tree (atomic rename, the listed mode). The destination must be a path `ALLOWED_SYSTEM_FILES` names:
 a folder and either one exact name or any plain name with a given ending. Today that is `/etc/pam.d/sill`,
 `/etc/udev/rules.d/{60-sill-ddc,70-keycap,70-palmrest}.rules`, `/etc/modules-load.d/{sill-ddc,keycap}.conf`, `/usr/lib/keycap/keycap.toml` (the desktop's vendor defaults for the keyboard daemon; `/etc/keycap` is the administrator's and is not on the list),
-`/etc/modprobe.d/99-palmrest.conf`, `/usr/lib/systemd/system/{keycap,turnstile}.service`,
+`/etc/modprobe.d/99-palmrest.conf`, `/usr/lib/systemd/system/{keycap,turnstile,palmrest}.service`,
 `/usr/lib/systemd/system/turnstile.socket`, `/etc/udev/rules.d/72-turnstile.rules`,
 `/etc/modules-load.d/turnstile.conf`, `/etc/polkit-1/rules.d/keycap.polkit.rules`, `/etc/porter/{callers,inferd-callers}.toml`,
-`/etc/quire/*-callers.toml` and `/etc/xdg/quire/*.toml`; anything else makes the whole release refused. The helper is
+`/etc/quire/*-callers.toml`, `/etc/xdg/quire/*.toml`, `/usr/lib/systemd/user/*.service` (the desktop's user units, which must be plain root-owned files: a link into the release reads as writable to the unit manager's judge) and `/usr/lib/systemd/user/xdg-desktop-portal.service.d/10-quire.conf`; anything else makes the whole release refused. A path is a link (an export) or a file (a system file), never both. A link into the install root found where a release places a file is what an earlier release's export left, and is replaced by the file (the link itself, never what it points at); a link anywhere else is the person's, and is a conflict. The helper is
 installed by hand and not by a release, so a new system file needs a new helper (this is the price of the list): a
 release that places the input service's files (`turnstile.*`, `72-turnstile.rules`) needs the helper that knows them,
 so re-run the installer (`scripts/install.sh`) from the new source before updating to it; an older helper refuses

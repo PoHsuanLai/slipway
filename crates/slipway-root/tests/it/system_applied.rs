@@ -109,6 +109,93 @@ fn a_link_in_the_way_is_not_followed() {
     assert_eq!(read(&elsewhere), "untouched");
 }
 
+const UNIT: &str = "/usr/lib/systemd/user/sill.service";
+const UNIT_IN_BUNDLE: &str = "system/usr/lib/systemd/user/sill.service";
+const UNIT_IN_TREE: &str = "lib/systemd/user/sill.service";
+
+#[test]
+fn a_unit_that_was_an_export_link_becomes_a_plain_file_and_the_old_release_is_untouched() {
+    let sandbox = Sandbox::new();
+    let at = sandbox.link(UNIT);
+
+    // 0.1.0 exports the unit as a link into the install root, as releases did.
+    let mut first = Recipe::new("0.1.0");
+    first.listed.push((UNIT_IN_TREE, "unit v1"));
+    first.exports.push((UNIT, UNIT_IN_TREE));
+    sandbox.install(&build(&first)).expect("install");
+    assert!(
+        std::fs::symlink_metadata(&at)
+            .expect("meta")
+            .file_type()
+            .is_symlink()
+    );
+
+    // 0.2.0 places it as a system file instead, so the unit manager reads a root-owned file.
+    let mut second = Recipe::new("0.2.0");
+    second.listed.push((UNIT_IN_BUNDLE, "unit v2"));
+    second.system.push(UNIT);
+    let applied = sandbox.install(&build(&second)).expect("install");
+    assert!(applied.conflicts.is_empty(), "{:?}", applied.conflicts);
+    let meta = std::fs::symlink_metadata(&at).expect("meta");
+    assert!(meta.file_type().is_file(), "a plain file, not a link");
+    assert_eq!(read(&at), "unit v2");
+    assert_eq!(meta.permissions().mode() & 0o777, 0o644);
+    assert_eq!(
+        read(&sandbox.layout.release_dir(&v("0.1.0")).join(UNIT_IN_TREE)),
+        "unit v1",
+        "the link was replaced, never written through"
+    );
+}
+
+#[test]
+fn a_stale_link_into_the_install_root_is_replaced_and_any_other_link_is_not() {
+    let into_root = |sandbox: &Sandbox| {
+        sandbox
+            .layout
+            .root
+            .join("an-old-release")
+            .join(UNIT_IN_TREE)
+    };
+    let elsewhere = |sandbox: &Sandbox| sandbox.tmp.path().join("elsewhere");
+    // (case, where the link points, replaced)
+    type Target = fn(&Sandbox) -> PathBuf;
+    let table: [(&str, Target, bool); 3] = [
+        ("into the install root", into_root, true),
+        ("somewhere else", elsewhere, false),
+        (
+            "climbing out of the install root",
+            |s| s.layout.root.join("../elsewhere"),
+            false,
+        ),
+    ];
+    for (name, target, replaced) in table {
+        let sandbox = Sandbox::new();
+        let at = sandbox.link(UNIT);
+        let target = target(&sandbox);
+        std::fs::create_dir_all(target.parent().expect("parent")).expect("dirs");
+        std::fs::write(&target, "what the link points at").expect("file");
+        std::fs::create_dir_all(at.parent().expect("parent")).expect("dirs");
+        symlink(&target, &at).expect("symlink");
+
+        let mut recipe = Recipe::new("0.1.0");
+        recipe.listed.push((UNIT_IN_BUNDLE, "unit"));
+        recipe.system.push(UNIT);
+        let applied = sandbox.install(&build(&recipe)).expect("install");
+
+        assert_eq!(
+            read(&target),
+            "what the link points at",
+            "{name}: not followed"
+        );
+        let is_link = std::fs::symlink_metadata(&at)
+            .expect("meta")
+            .file_type()
+            .is_symlink();
+        assert_eq!(!is_link, replaced, "{name}");
+        assert_eq!(applied.conflicts.is_empty(), replaced, "{name}");
+    }
+}
+
 #[test]
 fn a_rollback_puts_the_earlier_system_files_back() {
     let sandbox = Sandbox::new();
@@ -146,6 +233,9 @@ fn a_release_listing_a_system_file_no_rule_names_is_refused_whole() {
         "/etc/systemd/system/turnstile.socket",
         "/etc/udev/rules.d/73-turnstile.rules",
         "/etc/modules-load.d/turnstile.d.conf",
+        "/usr/lib/systemd/user/sill.target",
+        "/usr/lib/systemd/user/xdg-desktop-portal.service.d/20-evil.conf",
+        "/usr/lib/systemd/system/palmrest.service.d",
     ];
     for dest in table {
         let sandbox = Sandbox::new();

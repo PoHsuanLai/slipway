@@ -21,7 +21,7 @@ pub mod version;
 
 pub use audit::{Audit, AuditError, EntryKind};
 pub use digest::{Hasher, Sha256Hex};
-pub use exports::{ExportAction, Found, plan_exports};
+pub use exports::{ExportAction, Found, into_root, plan_exports};
 pub use guard::{Guard, MAX_UNCONFIRMED_BOOTS, Record as GuardRecord, Trust};
 pub use health::{Boot, LoginSession, Pending, PendingStage, Restore, decide_boot};
 pub use path::{BundlePath, PathError};

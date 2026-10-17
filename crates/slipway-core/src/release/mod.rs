@@ -111,6 +111,7 @@ impl Release {
         check_files(&raw.file)?;
         check_exports(&raw.export, &raw.file)?;
         check_system(&raw.system, &raw.file)?;
+        check_not_both(&raw.export, &raw.system)?;
         Ok(Self {
             version,
             released,
@@ -182,6 +183,18 @@ fn check_exports(exports: &[Export], files: &[FileEntry]) -> Result<(), ReleaseE
         }
     }
     Ok(())
+}
+
+/// A path is a link or a file, not both: a release that exports a link where it places a file would
+/// have the two fight over it.
+fn check_not_both(exports: &[Export], system: &[SystemFile]) -> Result<(), ReleaseError> {
+    match system
+        .iter()
+        .find(|file| exports.iter().any(|export| export.link == file.path))
+    {
+        Some(file) => Err(ReleaseError::ExportedAndPlaced(file.path.clone())),
+        None => Ok(()),
+    }
 }
 
 fn check_system(system: &[SystemFile], files: &[FileEntry]) -> Result<(), ReleaseError> {

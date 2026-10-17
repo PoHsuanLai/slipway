@@ -377,3 +377,26 @@ first line and each direct dependency once (the script drops line 1 and sorts un
 has a name matching the exclusion patterns by accident (the lock file shows none); that `cargo deny check bans sources`
 is green (`multiple-versions` only warns); that `cargo build --manifest-path` from `/` accepts `--locked` together with
 the `--config` flag on the pinned 1.98.1; and the toolchain-install branch of the script, which was not run.
+
+## System units and plain files (2026-10-17)
+
+`ALLOWED_SYSTEM_FILES` grew to 21 rules, in the order the desktop's `release/system-files.list` has them (after
+`/etc/modprobe.d/99-palmrest.conf`): `/usr/lib/systemd/system/palmrest.service` (the touchpad daemon became a
+system service, as keycap is), `/usr/lib/systemd/user/*.service` and
+`/usr/lib/systemd/user/xdg-desktop-portal.service.d/10-quire.conf`. The last two exist because a unit that has to
+prove its standing to its callers cannot be an export link: the unit manager's judge looks at the fragment with
+`lstat`, a link has mode 0777, and it reads as a file anyone could change. The desktop's `plain_units` therefore
+stages the units its caller table names under `system/`, with their drop-ins appended to their text.
+
+- A path is a link or a file: `Release::parse` refuses a release that exports a link where it places a file
+  (`ExportedAndPlaced`).
+- Upgrading across the change: the old release exported the unit as a link, the new one places a file. `SyncExports`
+  runs before `SyncSystem` and removes the old link (the old exports list it, it points into the root), so the path
+  is empty and the file is placed. A link into the install root that no export list explains (a stale one) is
+  `SystemFound::ExportLink` and is replaced the same way; a link anywhere else, or one that climbs out of the root,
+  is still the person's and a conflict. The replacement is the atomic rename of `write_atomic_mode`, which
+  replaces the link itself and never writes through it.
+- Tests: `slipway-core` `system.rs` (the table, the plan, the both-linked-and-placed refusal) and `slipway-root`
+  `system_applied.rs` (the upgrade across, the stale link, the three kinds of link in the way).
+- Not run: the new tests were written by reading. The new helper must be installed by hand on every computer before
+  a release that holds these files is published.

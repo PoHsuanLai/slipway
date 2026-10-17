@@ -16,8 +16,8 @@ use crate::fsutil::write_atomic_mode;
 use crate::layout::Layout;
 use semver::Version;
 use slipway_core::{
-    Authenticator, Placement, Sha256Hex, SystemAction, SystemFound, placements, plan_system,
-    vendor_copies,
+    Authenticator, Placement, Sha256Hex, SystemAction, SystemFound, into_root, placements,
+    plan_system, vendor_copies,
 };
 use std::collections::BTreeMap;
 use std::fs;
@@ -52,6 +52,15 @@ fn observe(layout: &Layout, path: &str) -> io::Result<SystemFound> {
     match fs::symlink_metadata(&at) {
         Ok(meta) if meta.file_type().is_file() && meta.len() <= MAX_SYSTEM_FILE_BYTES => {
             Ok(SystemFound::File(Sha256Hex::of(&fs::read(&at)?)))
+        }
+        Ok(meta) if meta.file_type().is_symlink() => {
+            // Looked at, never followed: only where it points says whose it is.
+            let target = fs::read_link(&at)?;
+            if into_root(&target, &layout.root) {
+                Ok(SystemFound::ExportLink)
+            } else {
+                Ok(SystemFound::Foreign)
+            }
         }
         Ok(_) => Ok(SystemFound::Foreign),
         Err(e) if e.kind() == io::ErrorKind::NotFound => {

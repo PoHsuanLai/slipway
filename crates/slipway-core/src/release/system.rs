@@ -49,7 +49,7 @@ const fn rule(dir: &'static str, name: NameRule) -> SystemRule {
 }
 
 /// Every file a release may place, and nothing else.
-pub const ALLOWED_SYSTEM_FILES: [SystemRule; 18] = [
+pub const ALLOWED_SYSTEM_FILES: [SystemRule; 21] = [
     // The shell's login service.
     rule("/etc/pam.d", NameRule::Exact("sill")),
     // Brightness over the monitor's own bus.
@@ -79,9 +79,23 @@ pub const ALLOWED_SYSTEM_FILES: [SystemRule; 18] = [
     ),
     rule("/etc/udev/rules.d", NameRule::Exact("72-turnstile.rules")),
     rule("/etc/modules-load.d", NameRule::Exact("turnstile.conf")),
-    // The palm-rejection daemon's device rule and module options.
+    // The touchpad daemon (a system service, as the keyboard daemon is): its device rule, its module
+    // options and its unit in the vendor folder.
     rule("/etc/udev/rules.d", NameRule::Exact("70-palmrest.rules")),
     rule("/etc/modprobe.d", NameRule::Exact("99-palmrest.conf")),
+    rule(
+        "/usr/lib/systemd/system",
+        NameRule::Exact("palmrest.service"),
+    ),
+    // The desktop's own user units, and the portal frontend's drop-in, as plain files owned by root:
+    // a link into the release (what an export is) reads as a file anyone could change to the unit
+    // manager's judge, so a unit that must prove its standing cannot be one. The units' own
+    // protections travel inside the unit file, not as drop-ins.
+    rule("/usr/lib/systemd/user", NameRule::Ending(".service")),
+    rule(
+        "/usr/lib/systemd/user/xdg-desktop-portal.service.d",
+        NameRule::Exact("10-quire.conf"),
+    ),
     // Who may call each daemon: the machine's caller tables.
     rule("/etc/porter", NameRule::Exact("callers.toml")),
     rule("/etc/porter", NameRule::Exact("inferd-callers.toml")),

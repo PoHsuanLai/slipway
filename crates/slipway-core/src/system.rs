@@ -3,7 +3,10 @@
 //! Like [`crate::exports`], the caller looks at the file system and reports what it found at each
 //! destination; this module only decides. A file is overwritten or removed only when its contents are
 //! exactly what an earlier release of ours placed there. Anything else at a destination is the
-//! person's or the system's, and is left alone.
+//! person's or the system's, and is left alone. The one exception is a link into the install root: it
+//! is what an earlier release's export left at a path this release places as a plain file instead (a
+//! unit that must be a file the unit manager's judge reads as root's), so it is replaced, as the file
+//! it stands for, never followed.
 
 use crate::{
     digest::Sha256Hex,
@@ -32,7 +35,9 @@ pub enum SystemFound {
     Missing,
     /// A regular file with this digest.
     File(Sha256Hex),
-    /// A link, a folder, a file too large to be ours, or anything else.
+    /// A link into the install root: what an earlier release's export left here.
+    ExportLink,
+    /// A link elsewhere, a folder, a file too large to be ours, or anything else.
     Foreign,
 }
 
@@ -115,7 +120,7 @@ pub fn plan_system(
     let mut actions = Vec::new();
     for want in new {
         actions.push(match at(&want.path) {
-            SystemFound::Missing => SystemAction::Place(want.clone()),
+            SystemFound::Missing | SystemFound::ExportLink => SystemAction::Place(want.clone()),
             SystemFound::File(have) if have == want.sha256 => SystemAction::Keep {
                 path: want.path.clone(),
             },

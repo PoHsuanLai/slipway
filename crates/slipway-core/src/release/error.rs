@@ -65,4 +65,7 @@ pub enum ReleaseError {
     /// The bundle's `system` folder holds a file the release does not list as a system file.
     #[error("the bundle holds {0} among the system files, but the release does not list it as one")]
     SystemFileUnlisted(String),
+    /// A path is both exported as a link and placed as a file.
+    #[error("the release both links and places {0}")]
+    ExportedAndPlaced(String),
 }
