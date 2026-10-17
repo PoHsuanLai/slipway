@@ -4,7 +4,7 @@
 //! A unit file, a device rule and a service that should be listening are three kinds of thing the
 //! system reads once. After `SyncSystem` the helper asks the system to read the unit folder again, to
 //! read the device rules again and apply them to devices already there, and to start the one socket
-//! the desktop's input service listens on. What runs is decided by [`commands`] from the paths alone
+//! the desktop's input service listens on, and the one service that maps the keyboard. What runs is decided by [`commands`] from the paths alone
 //! (a pure function), by fixed program paths, never by `PATH`; a missing program is not an error and a
 //! failing one is a warning, like the security labels: the files are in place either way.
 
@@ -18,6 +18,11 @@ const UNIT_FOLDER: &str = "/usr/lib/systemd/system/";
 const RULE_FOLDER: &str = "/etc/udev/rules.d/";
 /// The one socket that is started as soon as it is placed: the input service waits behind it.
 const INPUT_SOCKET: &str = "/usr/lib/systemd/system/turnstile.socket";
+
+/// The one service that is enabled and started as soon as it is placed: the keyboard map. It is placed in the
+/// vendor unit folder and its `[Install]` section is never acted on by anything else, so without this a
+/// release-only install would leave the keys unmapped until someone enabled it. Its unit name is the file name.
+const KEYMAP_SERVICE: &str = "/usr/lib/systemd/system/keycap.service";
 
 /// Where the service manager's tool is looked for (a fixed list, so root never depends on `PATH`).
 const MANAGER_TOOLS: &[&str] = &["/usr/bin/systemctl", "/bin/systemctl"];
@@ -72,8 +77,14 @@ const START_INPUT_SOCKET: Command = Command {
     args: &["enable", "--now", "turnstile.socket"],
 };
 
+const START_KEYMAP_SERVICE: Command = Command {
+    tools: MANAGER_TOOLS,
+    args: &["enable", "--now", "keycap.service"],
+};
+
 /// What to run after `changes`, in order: units are read again before the socket is started, rules are
-/// read again before they are applied.
+/// read again before they are applied, and the input socket is started before the keyboard map, which asks
+/// it for its virtual keyboards.
 pub fn commands(changes: &[Change]) -> Vec<Command> {
     let touches = |folder: &str| changes.iter().any(|c| c.path().starts_with(folder));
     let mut out = Vec::new();
@@ -84,11 +95,16 @@ pub fn commands(changes: &[Change]) -> Vec<Command> {
         out.push(READ_RULES_AGAIN);
         out.push(APPLY_RULES);
     }
-    if changes
-        .iter()
-        .any(|c| matches!(c, Change::Placed(path) if path == INPUT_SOCKET))
-    {
+    let placed = |wanted: &str| {
+        changes
+            .iter()
+            .any(|c| matches!(c, Change::Placed(path) if path == wanted))
+    };
+    if placed(INPUT_SOCKET) {
         out.push(START_INPUT_SOCKET);
+    }
+    if placed(KEYMAP_SERVICE) {
+        out.push(START_KEYMAP_SERVICE);
     }
     out
 }

@@ -146,6 +146,15 @@ Departures from the plan, standing facts and open items. An entry names the cond
     be added to the desktop's `release/check-helpers.py` first. Test: `export_links_are_allowed_only_below_the_listed_folders`
     now refuses three links in that folder. The helper and the daemon share the list, so a computer needs the new helper
     (`scripts/install.sh`) before this holds there; an older helper still accepts a release that exports there.
+27. **A release-only install enables the keyboard map (NEW-ROOT-5, lane pa3-root).** `settle` enabled and started
+    `turnstile.socket` only; `keycap.service` was placed in `/usr/lib/systemd/system` but its `[Install]` section is never
+    acted on, so the Mac key mapping did not run until someone enabled it (the desktop's `install/system.sh` does `enable --now
+    keycap.service`). The unit's name is the file name the exact list gives (`keycap.service`, checked against keycap's
+    `dist/keycap.service` and `install/system.sh`). `commands` now adds `enable --now keycap.service` when that file is
+    *placed*, after the socket's. Not done: a running map is not restarted when a release replaces its program (the unit file is
+    placed only when it changed, and a restart would drop key state mid-typing); it picks the new program up at the next start of
+    the computer or of the service. Test: `what_the_system_is_told_follows_the_paths_that_changed` (placed, removed, both).
+    The helper is installed by hand, so a computer needs the new helper (`scripts/install.sh`) before this holds there.
 
 ## Open questions
 

@@ -476,8 +476,30 @@ fn what_the_system_is_told_follows_the_paths_that_changed() {
         ("a login service", vec![placed("/etc/pam.d/sill")], vec![]),
         (
             "a unit",
-            vec![placed("/usr/lib/systemd/system/keycap.service")],
+            vec![placed("/usr/lib/systemd/system/other.service")],
             vec!["daemon-reload"],
+        ),
+        (
+            "the keyboard map is placed: read again, then enabled and started",
+            vec![placed("/usr/lib/systemd/system/keycap.service")],
+            vec!["daemon-reload", "enable --now keycap.service"],
+        ),
+        (
+            "the keyboard map is removed: read again, not started",
+            vec![removed("/usr/lib/systemd/system/keycap.service")],
+            vec!["daemon-reload"],
+        ),
+        (
+            "both services: the socket first, the map after it",
+            vec![
+                placed("/usr/lib/systemd/system/keycap.service"),
+                placed("/usr/lib/systemd/system/turnstile.socket"),
+            ],
+            vec![
+                "daemon-reload",
+                "enable --now turnstile.socket",
+                "enable --now keycap.service",
+            ],
         ),
         (
             "a rule",
