@@ -64,9 +64,7 @@ pub struct Status {
     pub progress: u32,
     /// When the last check finished (unix seconds), 0 never.
     pub last_checked: i64,
-    /// What went wrong, in plain words, "" when nothing.
-    pub problem: String,
-    /// What kind of failure it was, for programs; `None` when nothing went wrong.
+    /// What went wrong; the bus words are derived from it (plain sentence and stable kind); `None` when nothing went wrong.
     pub kind: Option<Problem>,
 }
 
@@ -81,7 +79,6 @@ impl Status {
             size: 0,
             progress: 0,
             last_checked,
-            problem: String::new(),
             kind: None,
         }
     }

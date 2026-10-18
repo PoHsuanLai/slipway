@@ -410,7 +410,7 @@ fn a_newer_release_than_the_one_shown_is_refused_before_anything_is_staged() {
     let fresh = engine_serving(&sandbox, "0.3.0", &store);
     let status = block_on(ran(&fresh, Job::Install(wanting("0.2.0"))));
     assert_eq!(status.phase, Phase::Failed, "{status:?}");
-    assert_eq!(status.problem, Problem::VersionChanged.plain());
+    assert_eq!(status.kind, Some(Problem::VersionChanged));
     assert!(!cache.join("0.3.0").exists(), "nothing was downloaded");
     assert_eq!(sandbox.current(), Some(v("0.1.0")));
 }
@@ -425,7 +425,7 @@ fn naming_a_version_when_nothing_is_on_offer_installs_nothing() {
     let engine = engine_serving(&sandbox, "0.2.0", &store);
     let status = block_on(ran(&engine, Job::Install(wanting("0.3.0"))));
     assert_eq!(status.phase, Phase::Failed, "{status:?}");
-    assert_eq!(status.problem, Problem::VersionChanged.plain());
+    assert_eq!(status.kind, Some(Problem::VersionChanged));
     assert_eq!(sandbox.current(), Some(v("0.2.0")));
 }
 

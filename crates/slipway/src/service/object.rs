@@ -126,7 +126,11 @@ impl Updates {
     /// What went wrong in plain words, empty when nothing.
     #[zbus(property)]
     fn problem(&self) -> String {
-        self.engine.snapshot().problem
+        self.engine
+            .snapshot()
+            .kind
+            .map(|k| k.plain().to_owned())
+            .unwrap_or_default()
     }
 
     /// What kind of failure it was, a stable word for programs and never shown to a person, empty
