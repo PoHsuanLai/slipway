@@ -147,21 +147,19 @@ impl Pkexec {
             .map_err(failure)?;
         let out = drain(child.stdout.take());
         let err = drain(child.stderr.take());
-        match wait_within(&mut child, self.patience).map_err(failure)? {
-            Some(status) => Ok(Finished {
-                status,
-                out: out.join().unwrap_or_default(),
-                err: err.join().unwrap_or_default(),
-            }),
-            None => {
-                // The helper may be a root process we cannot signal; stop waiting either way.
-                let _ = child.kill();
-                std::thread::spawn(move || {
-                    let _ = child.wait();
-                });
-                Err(failure("the update helper did not finish in time"))
-            }
-        }
+        let Some(status) = wait_within(&mut child, self.patience).map_err(failure)? else {
+            // The helper may be a root process we cannot signal; stop waiting either way.
+            let _ = child.kill();
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+            return Err(failure("the update helper did not finish in time"));
+        };
+        Ok(Finished {
+            status,
+            out: out.join().unwrap_or_default(),
+            err: err.join().unwrap_or_default(),
+        })
     }
 
     fn run(&self, helper: &Path, args: &[&OsStr]) -> Result<Report, ApplyFailure> {

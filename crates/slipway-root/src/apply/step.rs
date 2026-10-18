@@ -46,12 +46,11 @@ impl Links {
         }
     }
 
-    fn version(target: &Option<PathBuf>) -> Option<Version> {
-        let target = target.as_ref()?;
-        Version::parse(target.file_name()?.to_str()?).ok()
+    fn version(target: Option<&Path>) -> Option<Version> {
+        Version::parse(target?.file_name()?.to_str()?).ok()
     }
 
-    fn put(link: &Path, target: &Option<PathBuf>) -> io::Result<()> {
+    fn put(link: &Path, target: Option<&Path>) -> io::Result<()> {
         match target {
             Some(target) => switch_link(link, target),
             None => match fs::remove_file(link) {
@@ -63,8 +62,8 @@ impl Links {
 
     /// Points both links where they pointed before.
     fn restore(&self, layout: &Layout) -> io::Result<()> {
-        Self::put(&layout.current(), &self.current)?;
-        Self::put(&layout.previous(), &self.previous)
+        Self::put(&layout.current(), self.current.as_deref())?;
+        Self::put(&layout.previous(), self.previous.as_deref())
     }
 }
 
@@ -104,7 +103,7 @@ fn rewind(
     let back = match before.restore(layout) {
         Ok(()) => {
             // Best effort: links and system files follow the release that is current again.
-            if let Some(earlier) = Links::version(&before.current) {
+            if let Some(earlier) = Links::version(before.current.as_deref()) {
                 let _ = sync_exports(layout, auth, Some(left), &earlier);
                 let _ = sync_system(layout, auth, Some(left), &earlier, relabel);
             }
