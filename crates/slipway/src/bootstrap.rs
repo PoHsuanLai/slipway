@@ -31,7 +31,7 @@ fn desktop_table() -> Table {
 /// The context for the real system: the configured root, the real key, ureq, pkexec.
 pub fn production(config: Config, dirs: &Dirs) -> Context {
     let anchor: Anchor =
-        load_key(&config.pubkey_path).map(|k| Arc::new(k) as Arc<dyn Authenticator + Send + Sync>);
+        load_key(&config.pubkey_path).map(|k| Arc::new(k) as Arc<dyn Authenticator>);
     let seed = std::fs::read_to_string(MACHINE_ID).map_or(0, |id| jitter_seed(&id));
     Context {
         layout: Layout::new(config.root.clone()),

@@ -19,7 +19,7 @@ pub enum SignError {
 
 /// Something that can say whether a message was signed by the trusted key. The real one is
 /// [`PublicKey`]; tests supply their own.
-pub trait Authenticator {
+pub trait Authenticator: Send + Sync {
     /// `Ok` when `signature` (minisign text) is a valid signature of `message`.
     fn authenticate(&self, message: &[u8], signature: &str) -> Result<(), SignError>;
 }

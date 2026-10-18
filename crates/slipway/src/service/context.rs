@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 /// The trust anchor, or why there is none.
-pub type Anchor = Result<Arc<dyn Authenticator + Send + Sync>, KeyError>;
+pub type Anchor = Result<Arc<dyn Authenticator>, KeyError>;
 
 /// The engine's collaborators.
 pub struct Context {

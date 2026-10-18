@@ -185,7 +185,7 @@ impl Engine {
         }
     }
 
-    fn authenticator(&self) -> Result<Arc<dyn Authenticator + Send + Sync>, Problem> {
+    fn authenticator(&self) -> Result<Arc<dyn Authenticator>, Problem> {
         match &self.ctx.anchor {
             Ok(auth) => Ok(Arc::clone(auth)),
             Err(e) => Err(Problem::from(e)),
@@ -364,7 +364,7 @@ impl Engine {
         self: &Arc<Self>,
         fetched: &Fetched,
         dir: &std::path::Path,
-        auth: &Arc<dyn Authenticator + Send + Sync>,
+        auth: &Arc<dyn Authenticator>,
     ) -> Result<(), Problem> {
         let (engine, fetched, dir, auth) = (
             Arc::clone(self),
