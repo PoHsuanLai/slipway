@@ -5,7 +5,7 @@
 //! label from the policy. Where SELinux is not in use, or the tool is not installed, nothing is done and
 //! that is not a problem: labels are best effort and never fail an install.
 
-use super::settle::Change;
+use super::settle::{Change, settle};
 use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -107,7 +107,8 @@ impl RunProgram for SystemRunner {
     }
 }
 
-/// Relabels with `restorecon -F` (and `-R` for a tree) when SELinux is in use.
+/// Relabels with `restorecon -F` (and `-R` for a tree) when SELinux is in use, and tells the system about
+/// system files with the programs the same runner runs.
 #[derive(Debug)]
 pub struct Selinux<R> {
     status_file: PathBuf,
@@ -155,5 +156,8 @@ impl<R: RunProgram> Relabel for Selinux<R> {
             }
         }
         Relabeled::NotNeeded
+    }
+    fn settle(&self, changes: &[Change]) -> Vec<String> {
+        settle(&self.runner, changes)
     }
 }

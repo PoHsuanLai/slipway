@@ -1,7 +1,7 @@
 use crate::support::{Accept, Recipe, Sandbox, build, read, v};
 use slipway_root::apply::{
-    Change, Command, Ran, Reach, Relabel, Relabeled, RunProgram, Selinux, Settling, commands,
-    install_with, rollback,
+    Change, Command, Ran, Reach, Relabel, Relabeled, RunProgram, Selinux, commands, install_with,
+    rollback,
 };
 use std::cell::RefCell;
 use std::ffi::OsString;
@@ -479,7 +479,7 @@ fn each_file_of_the_input_service_is_placed_and_the_system_is_told_once() {
         ("/usr/bin/systemctl", Ran::Succeeded),
         ("/usr/bin/udevadm", Ran::Succeeded),
     ]);
-    let host = Settling::new(slipway_root::apply::NoRelabel, &fake);
+    let host = Selinux::new(PathBuf::from("/nonexistent/enforce"), Vec::new(), &fake);
     let applied = install_with(
         &sandbox.layout,
         &sandbox.stage(&build(&recipe)),
@@ -542,7 +542,7 @@ fn a_failing_or_missing_tool_is_a_note_and_never_stops_an_install() {
     for (answers, notes) in table {
         let sandbox = Sandbox::new();
         let fake = Fake::new(answers);
-        let host = Settling::new(slipway_root::apply::NoRelabel, &fake);
+        let host = Selinux::new(PathBuf::from("/nonexistent/enforce"), Vec::new(), &fake);
         let applied = install_with(
             &sandbox.layout,
             &sandbox.stage(&build(&recipe)),

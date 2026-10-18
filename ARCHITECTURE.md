@@ -145,8 +145,8 @@ also gets `systemctl enable --now turnstile.socket`, after the reload, and `keyc
 --now keycap.service` after that (the keyboard map asks the input service for its devices; `install/system.sh` of the desktop
 enables it too, so both routes end alike), then `palmrest.service` being *placed* gets `systemctl enable --now palmrest.service` (the touchpad daemon, same reason; `install/system.sh palmrest` enables it too). A missing program is skipped and a failing one
 is a warning in the report, as with the security labels: the files are in place either way. It is a second method on
-the `Relabel` seam (`settle`, a no-op by default), implemented by `Settling` (the real helper's choice, wrapping
-`Selinux`), so tests that use `NoRelabel` or a fake never run a real program.
+the `Relabel` seam (`settle`, a no-op by default), implemented by `Selinux` (the real helper's choice, which runs both with its one runner), so tests that use `NoRelabel`
+or a fake runner never run a real program.
 
 SELinux: after a release is published and before it becomes current, and after system files are
 placed, the helper runs `restorecon -RF <root>` and `restorecon -F <files>` (`apply/relabel.rs`), only when

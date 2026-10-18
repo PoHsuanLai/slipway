@@ -26,5 +26,5 @@ pub use error::{ApplyError, Back, ExitCode};
 pub use guard::{Started, note_confirmed, note_start};
 pub use install::{Applied, install, install_with, rollback, rollback_with};
 pub use relabel::{NoRelabel, Ran, Reach, Relabel, Relabeled, RunProgram, Selinux, SystemRunner};
-pub use settle::{Change, Command, Settling, commands};
+pub use settle::{Change, Command, commands};
 pub use staged::{Sealed, Staged, StagedError};

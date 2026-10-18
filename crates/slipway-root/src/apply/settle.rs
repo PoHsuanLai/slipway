@@ -8,9 +8,9 @@
 //! (a pure function), by fixed program paths, never by `PATH`; a missing program is not an error and a
 //! failing one is a warning, like the security labels: the files are in place either way.
 
-use super::relabel::{Ran, Reach, Relabel, Relabeled, RunProgram, Selinux, SystemRunner};
+use super::relabel::{Ran, RunProgram};
 use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// The folder of the unit files the helper may place.
 const UNIT_FOLDER: &str = "/usr/lib/systemd/system/";
@@ -121,27 +121,6 @@ pub fn commands(changes: &[Change]) -> Vec<Command> {
     out
 }
 
-/// Relabels with `L` and tells the system about system files with the programs `R` runs.
-#[derive(Debug)]
-pub struct Settling<L, R> {
-    relabel: L,
-    runner: R,
-}
-
-impl Settling<Selinux<SystemRunner>, SystemRunner> {
-    /// The real system: SELinux labels where in use, and the real programs.
-    pub fn system() -> Self {
-        Self::new(Selinux::system(), SystemRunner)
-    }
-}
-
-impl<L, R> Settling<L, R> {
-    /// Relabels with `relabel` and runs programs with `runner`.
-    pub fn new(relabel: L, runner: R) -> Self {
-        Self { relabel, runner }
-    }
-}
-
 /// Runs `command` with the first of its tools that exists.
 fn run_first(runner: &impl RunProgram, command: Command) -> Ran {
     let args: Vec<OsString> = command.args.iter().map(OsString::from).collect();
@@ -154,20 +133,16 @@ fn run_first(runner: &impl RunProgram, command: Command) -> Ran {
     Ran::Missing
 }
 
-impl<L: Relabel, R: RunProgram> Relabel for Settling<L, R> {
-    fn relabel(&self, paths: &[PathBuf], reach: Reach) -> Relabeled {
-        self.relabel.relabel(paths, reach)
-    }
-
-    fn settle(&self, changes: &[Change]) -> Vec<String> {
-        commands(changes)
-            .into_iter()
-            .filter_map(|command| match run_first(&self.runner, command) {
-                Ran::Failed(why) => Some(format!(
-                    "the system could not be told about the new system files: {why}"
-                )),
-                Ran::Missing | Ran::Succeeded => None,
-            })
-            .collect()
-    }
+/// Tells the system about `changes` with the programs `runner` runs; a plain note for each thing that
+/// did not work.
+pub(super) fn settle(runner: &impl RunProgram, changes: &[Change]) -> Vec<String> {
+    commands(changes)
+        .into_iter()
+        .filter_map(|command| match run_first(runner, command) {
+            Ran::Failed(why) => Some(format!(
+                "the system could not be told about the new system files: {why}"
+            )),
+            Ran::Missing | Ran::Succeeded => None,
+        })
+        .collect()
 }
