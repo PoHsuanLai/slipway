@@ -268,7 +268,7 @@ Nothing from the second slipway lane was compiled or run (only `cargo fmt -p` an
 - `zbus` 5.19: `fdo::DBusProxy::new(&Connection)`, `get_name_owner(BusName)`, `Message::header().sender()`
   with `.as_str()` (all copied from sill's `accounts/backend/actions.rs`, same zbus version).
 - `Config::with_user` moves two fields out of `self` and then uses `..self`.
-- `Accept` coerces to `Arc<dyn Authenticator + Send + Sync>` inside `Ok(...)` in the engine test.
+- `Accept` coerces to `Arc<dyn Authenticator>` inside `Ok(...)` in the engine test.
 - The engine test runs `Engine::begin` on a current-thread runtime and polls `snapshot()`.
 - The notification-sender check and the bus activation file are not covered by tests (no bus in a test);
   the orchestrator's session scenarios check them.
