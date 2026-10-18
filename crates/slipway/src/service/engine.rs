@@ -52,14 +52,8 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 impl Engine {
     /// An engine whose status starts from what is installed and when the last check was.
     pub fn new(ctx: Context) -> Arc<Self> {
-        let current = ctx
-            .layout
-            .installed()
-            .ok()
-            .and_then(|i| i.current)
-            .map(|v| v.to_string())
-            .unwrap_or_default();
-        let last = ctx.store.load().last_check.map_or(0, |t| t.0);
+        let current = ctx.layout.installed().ok().and_then(|i| i.current);
+        let last = ctx.store.load().last_check;
         Arc::new(Self {
             status: Mutex::new(Status::starting(current, last)),
             offer: Mutex::new(None),
@@ -228,11 +222,11 @@ impl Engine {
     }
 
     async fn found_nothing(&self) {
-        let checked = now().0;
+        let checked = Some(now());
         *lock(&self.offer) = None;
         self.change(|s| {
             s.phase = Phase::Idle;
-            s.available.clear();
+            s.available = None;
             s.notes.clear();
             s.size = 0;
             s.last_checked = checked;
@@ -251,10 +245,10 @@ impl Engine {
         }
         let release = fetched.release.clone();
         *lock(&self.offer) = Some(fetched);
-        let checked = now().0;
+        let checked = Some(now());
         self.change(|s| {
             s.phase = Phase::Available;
-            s.available = release.version.to_string();
+            s.available = Some(release.version.clone());
             s.notes = release.notes.clone();
             s.size = release.bundle.size;
             s.last_checked = checked;
@@ -325,7 +319,7 @@ impl Engine {
                 // current: it must still be watched, or it would run unmonitored.
                 if self.installed_version().as_ref() == Some(&version) {
                     self.remember_install(&version);
-                    self.change(|s| s.current = version.to_string()).await;
+                    self.change(|s| s.current = Some(version.clone())).await;
                 }
                 return Err(Problem::from_apply(&failure));
             }
@@ -339,8 +333,8 @@ impl Engine {
         *lock(&self.offer) = None;
         self.change(|s| {
             s.phase = Phase::Installed;
-            s.current = version.to_string();
-            s.available.clear();
+            s.current = Some(version.clone());
+            s.available = None;
             s.notes.clear();
             s.size = 0;
             s.progress = 0;
@@ -430,10 +424,7 @@ impl Engine {
                 s.refuse(left);
             }
         });
-        let current = self
-            .installed_version()
-            .map(|v| v.to_string())
-            .unwrap_or_default();
+        let current = self.installed_version();
         self.change(|s| {
             s.phase = Phase::Installed;
             s.current = current;

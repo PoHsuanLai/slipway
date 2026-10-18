@@ -1,6 +1,8 @@
 //! What the service says about itself: the properties of the bus object.
 
 use crate::problem::Problem;
+use semver::Version;
+use slipway_core::UnixSeconds;
 
 /// Where the update flow is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,29 +54,29 @@ impl Phase {
 pub struct Status {
     /// Where the flow is.
     pub phase: Phase,
-    /// The installed version, "" when unknown.
-    pub current: String,
-    /// The newer version on offer, "" when none.
-    pub available: String,
+    /// The installed version, `None` when unknown.
+    pub current: Option<Version>,
+    /// The newer version on offer, `None` when none.
+    pub available: Option<Version>,
     /// Its notes.
     pub notes: String,
     /// Its download size in bytes.
     pub size: u64,
     /// Download progress in permille.
     pub progress: u32,
-    /// When the last check finished (unix seconds), 0 never.
-    pub last_checked: i64,
+    /// When the last check finished, `None` for never.
+    pub last_checked: Option<UnixSeconds>,
     /// What went wrong; the bus words are derived from it (plain sentence and stable kind); `None` when nothing went wrong.
     pub kind: Option<Problem>,
 }
 
 impl Status {
     /// The status of a service that has just started.
-    pub fn starting(current: String, last_checked: i64) -> Self {
+    pub fn starting(current: Option<Version>, last_checked: Option<UnixSeconds>) -> Self {
         Self {
             phase: Phase::Idle,
             current,
-            available: String::new(),
+            available: None,
             notes: String::new(),
             size: 0,
             progress: 0,

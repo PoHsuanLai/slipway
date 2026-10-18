@@ -90,13 +90,21 @@ impl Updates {
     /// The installed version.
     #[zbus(property)]
     fn current(&self) -> String {
-        self.engine.snapshot().current
+        self.engine
+            .snapshot()
+            .current
+            .map(|v| v.to_string())
+            .unwrap_or_default()
     }
 
     /// The newer version on offer, empty when none.
     #[zbus(property)]
     fn available(&self) -> String {
-        self.engine.snapshot().available
+        self.engine
+            .snapshot()
+            .available
+            .map(|v| v.to_string())
+            .unwrap_or_default()
     }
 
     /// The notes of the version on offer.
@@ -120,7 +128,7 @@ impl Updates {
     /// When the last check finished, unix seconds, 0 for never.
     #[zbus(property)]
     fn last_checked(&self) -> i64 {
-        self.engine.snapshot().last_checked
+        self.engine.snapshot().last_checked.map_or(0, |t| t.0)
     }
 
     /// What went wrong in plain words, empty when nothing.

@@ -279,19 +279,22 @@ fn a_rolled_back_version_is_not_offered_again_until_a_newer_one_appears() {
         let engine = engine_serving(&sandbox, "0.2.0", &store);
         let status = checked(&engine).await;
         assert_eq!(status.phase, Phase::Idle, "{status:?}");
-        assert_eq!(status.available, "");
-        assert_eq!(status.current, "0.1.0");
-        assert!(status.last_checked > 0, "the check itself did happen");
+        assert_eq!(status.available, None);
+        assert_eq!(status.current, Some(v("0.1.0")));
+        assert!(
+            status.last_checked.is_some_and(|at| at.0 > 0),
+            "the check itself did happen"
+        );
 
         let newer = engine_serving(&sandbox, "0.3.0", &store);
         let status = checked(&newer).await;
         assert_eq!(status.phase, Phase::Available, "{status:?}");
-        assert_eq!(status.available, "0.3.0");
+        assert_eq!(status.available, Some(v("0.3.0")));
 
         store.update(|s| s.refused = None).expect("forget");
         let status = checked(&engine).await;
         assert_eq!(status.phase, Phase::Available, "{status:?}");
-        assert_eq!(status.available, "0.2.0");
+        assert_eq!(status.available, Some(v("0.2.0")));
     });
 }
 
@@ -342,7 +345,11 @@ fn an_install_that_failed_after_the_switch_is_still_watched_by_the_health_check(
         let engine = engine_with(&sandbox, "0.2.0", &store, helper);
         let status = ran(&engine, Job::Install(wanting("0.2.0"))).await;
         assert_eq!(status.phase, Phase::Failed, "{status:?}");
-        assert_eq!(status.current, "0.2.0", "what runs is what the page says");
+        assert_eq!(
+            status.current,
+            Some(v("0.2.0")),
+            "what runs is what the page says"
+        );
     });
     assert_eq!(sandbox.current(), Some(v("0.2.0")));
     let pending = store.load().pending.expect("the health marker was written");
@@ -378,7 +385,7 @@ fn the_version_the_person_was_shown_is_installed() {
             ran(&engine, Job::Install(wanting("0.2.0"))).await
         });
         assert_eq!(status.phase, Phase::Installed, "{status:?}");
-        assert_eq!(status.current, "0.2.0");
+        assert_eq!(status.current, Some(v("0.2.0")));
     }
 }
 
